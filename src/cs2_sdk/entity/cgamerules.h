@@ -1,7 +1,7 @@
 /**
  * =============================================================================
  * CS2Fixes
- * Copyright (C) 2023-2024 Source2ZE
+ * Copyright (C) 2023-2025 Source2ZE
  * =============================================================================
  *
  * This program is free software; you can redistribute it and/or modify it under
@@ -65,6 +65,7 @@ public:
 	SCHEMA_FIELD(GameTime_t, m_fRoundStartTime)
 	SCHEMA_FIELD(GameTime_t, m_flRestartRoundTime)
 	SCHEMA_FIELD_POINTER(int, m_nEndMatchMapGroupVoteOptions)
+	SCHEMA_FIELD_POINTER(int, m_nEndMatchMapGroupVoteTypes)
 	SCHEMA_FIELD(int, m_nEndMatchMapVoteWinner)
 	SCHEMA_FIELD(int, m_iRoundTime)
 	SCHEMA_FIELD(bool, m_bFreezePeriod)

@@ -1,7 +1,7 @@
 /**
  * =============================================================================
  * CS2Fixes
- * Copyright (C) 2023-2024 Source2ZE
+ * Copyright (C) 2023-2025 Source2ZE
  * =============================================================================
  *
  * This program is free software; you can redistribute it and/or modify it under
@@ -28,18 +28,46 @@ using json = nlohmann::json;
 
 #define GFLBANS_PREFIX " \x07[GFLBans]\1 "
 
-enum InfType
+enum class LogLevel
 {
-	Ban,
-	Mute,
-	Gag,
-	Silence,
-	AdminChatGag,
-	CallAdminBlock,
-	Warn
+	None = 0,
+	Error = 1,
+	Debug = 2
 };
 
-enum EchoType
+enum class InfType
+{
+	Ban = 0, // Always guarantee Ban is first, as some logic depends on it
+	Mute = 1,
+	Gag = 2,
+	Silence = 3,
+	AdminChatGag = 4,
+	CallAdminBlock = 5,
+	ItemBlock = 6,
+	Warn = 7,
+	Invalid = 8
+};
+
+inline bool IsValidInfType(InfType iType) noexcept
+{
+	return iType >= InfType::Ban && iType < InfType::Invalid;
+}
+
+inline InfType& operator++(InfType& iType)
+{
+	if (iType == InfType::Invalid)
+		return iType = InfType::Invalid;
+	return iType = static_cast<InfType>(static_cast<int>(iType) + 1);
+}
+
+inline InfType operator++(InfType& iType, int)
+{
+	InfType temp(iType);
+	++iType;
+	return temp;
+}
+
+enum class EchoType
 {
 	None,
 	All,
@@ -48,7 +76,7 @@ enum EchoType
 	Console
 };
 
-enum InfractionFlags
+enum class InfractionFlags
 {
 	SYSTEM = 1 << 0,
 	GLOBAL = 1 << 1,
@@ -64,20 +92,10 @@ enum InfractionFlags
 	CALL_ADMIN_BAN = 1 << 11,
 	SESSION = 1 << 12,
 	DEC_ONLINE_ONLY = 1 << 13,
+	ITEM_BLOCK = 1 << 14,
 	AUTO_TIER = 1 << 16,
-	NOT_WARNING = (VOICE_BLOCK | CHAT_BLOCK | BAN | ADMIN_CHAT_BLOCK | CALL_ADMIN_BAN)
+	NOT_WARNING = (VOICE_BLOCK | CHAT_BLOCK | BAN | ADMIN_CHAT_BLOCK | CALL_ADMIN_BAN | ITEM_BLOCK)
 };
-
-void EchoMessage(CCSPlayerController* pAdmin, CCSPlayerController* pTarget, const char* pszPunishment, EchoType echo);
-
-// Creates a new infraction of type infType on the server and adds it to GFLBans. pBadPerson must be a valid client
-void CreateInfraction(InfType infType, EchoType echo, CCSPlayerController* pAdmin,
-					  CCSPlayerController* pBadPerson, std::string strReason, int iDuration,
-					  bool bOnlineOnly);
-
-// Removes all infractions of type infType both on the server and on GFLBans. pGoodPerson must be a valid client
-void RemoveInfraction(InfType infType, EchoType echo, CCSPlayerController* pAdmin,
-					  CCSPlayerController* pGoodPerson, std::string strReason);
 
 class GFLBans_InfractionBase
 {
@@ -89,7 +107,14 @@ public:
 	};
 
 	GFLBans_InfractionBase(InfType infType, CHandle<CCSPlayerController> hTarget, std::string strReason,
-						   CHandle<CCSPlayerController> hAdmin = nullptr);
+						   CHandle<CCSPlayerController> hAdmin = nullptr) :
+		m_infType(infType),
+		m_hTarget(hTarget), m_hAdmin(hAdmin)
+	{
+		m_strReason = strReason.length() == 0	? "No reason provided" :
+					  strReason.length() <= 280 ? strReason :
+												  strReason.substr(0, 280);
+	}
 
 	virtual json CreateInfractionJSON() const = 0;
 	InfType GetInfractionType() const noexcept { return m_infType; }
@@ -106,10 +131,11 @@ protected:
 class GFLBans_Infraction : public GFLBans_InfractionBase
 {
 public:
-	GFLBans_Infraction(InfType infType, CHandle<CCSPlayerController> hTarget, std::string strReason,
-					   CHandle<CCSPlayerController> hAdmin = nullptr, int iDuration = -1, bool bOnlineOnly = false);
+	GFLBans_Infraction(InfType infType, CHandle<CCSPlayerController> hTarget,
+					   std::string strReason, CHandle<CCSPlayerController> hAdmin = nullptr,
+					   int iDuration = -1, bool bOnlineOnly = false);
 
-	bool IsSession() const noexcept;
+	inline bool IsSession() const noexcept { return m_wExpires < m_wCreated && m_infType != InfType::Ban; }
 
 	// Creates a JSON object to pass in a POST request to GFLBans
 	virtual json CreateInfractionJSON() const override;
@@ -137,11 +163,11 @@ public:
 class GFLBans_Report
 {
 public:
-	GFLBans_Report(CCSPlayerController* hCaller, std::string strMessage, CCSPlayerController* hBadPerson = nullptr);
+	GFLBans_Report(CCSPlayerController* pCaller, std::string strMessage, CCSPlayerController* pBadPerson = nullptr);
 
 	json CreateReportJSON() const;
-	bool IsReport() const noexcept;
-	void GFLBans_CallAdmin(CCSPlayerController* pCaller);
+	inline bool IsReport() const noexcept { return m_jBadPerson != nullptr && !m_jBadPerson.empty(); }
+	void CallAdmin(CCSPlayerController* pCaller);
 	virtual ~GFLBans_Report() {}
 
 protected:
@@ -152,74 +178,55 @@ protected:
 	std::string m_strBadPersonName;
 };
 
+struct InfractionStatisticsReply
+{
+public:
+	InfractionStatisticsReply()
+	{
+		for (InfType i = InfType::Ban; IsValidInfType(i); ++i)
+		{
+			mapPunishmentCounts[i] = 0;
+			mapPunishmentLongest[i] = std::nullopt;
+		}
+	}
+
+	std::map<InfType, std::time_t> mapPunishmentCounts;
+	std::map<InfType, std::optional<std::time_t>> mapPunishmentLongest;
+};
+
 class GFLBansSystem
 {
 public:
-	// When was the last time a heartbeat occured
-	std::time_t m_wLastHeartbeat;
-	std::map<uint64, std::pair<std::shared_ptr<GFLBans_Report>, CTimerBase*>> mapPendingReports;
-
-	// Make sure other functions know these has been no heartbeat yet (they check if it was at most 120 seconds ago)
-	GFLBansSystem() { m_wLastHeartbeat = std::time(nullptr) - 121; }
-
-	// Updates m_wLastHeartbeat to the last time the heartbeat successfully got a response from GFLBans
-	// Allows GFLBans to do the following:
-	// - Know if the server is alive
-	// - Update infractions that only decrement while the player is online
-	// - Display information about the server in the Web UI
 	// returns true if ATTEMPTS to heartbeat, false otherwise. This is not based on if GFLBans responds
-	bool GFLBans_Heartbeat();
+	// https://github.com/gflze/GFLBans/wiki#heartbeat
+	bool Heartbeat();
 
-	// Update g_pAdminSystem with infractions from the web. We are assuming the response json only has 1
-	// each type of punishment and not checking for multiples. If there are multiple active, we can just
-	// apply a new one when the applied one expires (this is also how we will be able to change currently
-	// active punishments that were altered through the web page)
-	void GFLBans_CheckPlayerInfractions(ZEPlayer* player);
+	// Update g_pAdminSystem with infractions from the web.
+	// https://github.com/gflze/GFLBans/wiki#checking-player-infractions
+	void CheckPlayerInfractions(ZEPlayer* player);
 
-	// Send a POST request to GFLBans telling it to add a block for a player
-	void GFLBans_CreateInfraction(std::shared_ptr<GFLBans_Infraction> infPunishment,
-								  CCSPlayerController* pBadPerson, CCSPlayerController* pAdmin,
-								  EchoType echo = EchoType::All);
+	// Creates a new infraction of type infType on the server and adds it to GFLBans.
+	// https://github.com/gflze/GFLBans/wiki#standard-infractions
+	void CreateInfraction(InfType infType, EchoType echo, CCSPlayerController* pAdmin,
+						  CCSPlayerController* pBadPerson, std::string strReason, int iDuration,
+						  bool bOnlineOnly, bool bPrintErrorsToAdmin = true);
 
-	// Send a POST request to GFLBans telling it to remove all blocks of a given type for a player
-	void GFLBans_RemoveInfraction(std::shared_ptr<GFLBans_InfractionRemoval> infPunishment,
-								  CCSPlayerController* pGoodPerson, CCSPlayerController* pAdmin,
-								  EchoType echo = EchoType::All);
-
-	// If bApplyBlock, will attempt to apply block on the server if json contains one
-	// Return Values are based on if jAllBlockInfo contains a block, not if it was applied
-	bool CheckJSONForBlock(ZEPlayer* player, json jAllBlockInfo, InfType blockType,
-						   bool bApplyBlock = true, bool bRemoveSession = true);
+	// Removes all infractions of type infType both on the server and on GFLBans
+	// if admin has permission on GFLBans to remove them
+	// https://github.com/gflze/GFLBans/wiki#removing-infractions
+	void RemoveInfraction(InfType infType, EchoType echo, CCSPlayerController* pAdmin,
+						  CCSPlayerController* pGoodPerson, std::string strReason,
+						  bool bPrintErrorsToAdmin = true);
 
 	// Returns true if a chat message should be filtered and false if not
 	// If gflbans_filtered_gag_duration is non-negative, pChatter will be gagged for that duration if true return value
 	bool FilterMessage(CCSPlayerController* pChatter, const CCommand& args);
 
-	// Prints pBadPerson's longest punishments of each type to pAdmin.
-	void CheckPunishmentHistory(CCSPlayerController* pAdmin, CCSPlayerController* pBadPerson,
-								std::string strReason);
-
-	// Gets pBadPerson's longest punishment duration of iType and then issues a new punishment with double the duration
-	// returns false if it does not send a web request, true if a web request is sent (regardless of whether it returns an error or not)
-	bool StackPunishment(CCSPlayerController* pAdmin, CCSPlayerController* pBadPerson,
-						 std::string strReason, InfType iType, EchoType echo, bool bWarnFirst);
-
-private:
-	void GetPunishmentHistory(std::shared_ptr<std::vector<int>> vecInfractions, int iCounted,
-							  CHandle<CCSPlayerController> hAdmin, CHandle<CCSPlayerController> hBadPerson,
-							  std::string strReason);
-
-	void DisplayPunishmentHistory(std::shared_ptr<std::vector<int>> vecInfractions,
-								  CHandle<CCSPlayerController> hAdmin, CHandle<CCSPlayerController> hBadPerson,
-								  std::string strReason);
-
-	bool GetPunishmentStacks(std::shared_ptr<std::vector<int>> vecInfractions, int iCounted,
-							 CHandle<CCSPlayerController> hAdmin, CHandle<CCSPlayerController> hBadPerson,
-							 std::string strReason, InfType iType, EchoType echo, bool bWarnFirst);
-
-	void ApplyStackedPunishment(std::shared_ptr<std::vector<int>> vecInfractions,
-								CHandle<CCSPlayerController> hAdmin, CHandle<CCSPlayerController> hBadPerson,
-								std::string strReason, InfType iType, EchoType echo, bool bWarnFirst);
+	// Passes pBadPerson's past infraction info into funcLogic
+	// https://github.com/gflze/GFLBans/wiki#getting-infractions-stats
+	void GetPunishmentStats(CCSPlayerController* pAdmin, CCSPlayerController* pBadPerson, bool bOnlineOnly,
+							std::function<void(CCSPlayerController*, CCSPlayerController*, InfractionStatisticsReply)> funcLogic,
+							std::string strReason = "");
 };
 
 extern GFLBansSystem* g_pGFLBansSystem;

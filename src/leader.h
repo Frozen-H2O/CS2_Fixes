@@ -1,7 +1,7 @@
 /**
  * =============================================================================
  * CS2Fixes
- * Copyright (C) 2023-2024 Source2ZE
+ * Copyright (C) 2023-2025 Source2ZE
  * =============================================================================
  *
  * This program is free software; you can redistribute it and/or modify it under
@@ -39,9 +39,9 @@ struct ColorPreset
 extern std::map<std::string, ColorPreset> mapColorPresets;
 extern CUtlVector<ZEPlayerHandle> g_vecLeaders;
 
-extern bool g_bEnableLeader;
-extern bool g_bLeaderActionsHumanOnly;
-extern std::string g_strMarkParticlePath;
+extern CConVar<bool> g_cvarEnableLeader;
+extern CConVar<bool> g_cvarLeaderActionsHumanOnly;
+extern CConVar<CUtlString> g_cvarMarkParticlePath;
 
 void Leader_ApplyLeaderVisuals(CCSPlayerPawn* pPawn);
 void Leader_PostEventAbstract_Source1LegacyGameEvent(const uint64* clients, const CNetMessage* pData);

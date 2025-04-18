@@ -1,7 +1,7 @@
 /**
  * =============================================================================
  * CS2Fixes
- * Copyright (C) 2023-2024 Source2ZE
+ * Copyright (C) 2023-2025 Source2ZE
  * =============================================================================
  *
  * This program is free software; you can redistribute it and/or modify it under
@@ -27,6 +27,10 @@
 
 bool CMemPatch::PerformPatch(CGameConfig* gameConfig)
 {
+	// We're patched already
+	if (m_pOriginalBytes)
+		return true;
+
 	// If we already have an address, no need to look for it again
 	if (!m_pPatchAddress)
 	{
@@ -77,4 +81,5 @@ void CMemPatch::UndoPatch()
 	Plat_WriteMemory((void*)m_pPatchAddress, m_pOriginalBytes, m_iPatchLength);
 
 	delete[] m_pOriginalBytes;
+	m_pOriginalBytes = nullptr;
 }

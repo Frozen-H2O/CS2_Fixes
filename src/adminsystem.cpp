@@ -1,7 +1,7 @@
 /**
  * =============================================================================
  * CS2Fixes
- * Copyright (C) 2023-2024 Source2ZE
+ * Copyright (C) 2023-2025 Source2ZE
  * =============================================================================
  *
  * This program is free software; you can redistribute it and/or modify it under
@@ -26,6 +26,7 @@
 #include "entity/cbaseentity.h"
 #include "entity/cgamerules.h"
 #include "entity/cparticlesystem.h"
+#include "entwatch.h"
 #include "filesystem.h"
 #include "gamesystem.h"
 #include "icvar.h"
@@ -39,7 +40,7 @@
 
 extern IVEngineServer2* g_pEngineServer2;
 extern CGameEntitySystem* g_pEntitySystem;
-extern CGlobalVars* gpGlobals;
+extern CGlobalVars* GetGlobals();
 extern CCSGameRules* g_pGameRules;
 extern GFLBansSystem* g_pGFLBansSystem;
 
@@ -113,12 +114,12 @@ void PrintMultiAdminAction(ETargetType nType, const char* pszAdminName, const ch
 	}
 }
 
-CON_COMMAND_F(c_reload_admins, "Reload admin config", FCVAR_SPONLY | FCVAR_LINKED_CONCOMMAND)
+CON_COMMAND_F(c_reload_admins, "- Reload admin config", FCVAR_SPONLY | FCVAR_LINKED_CONCOMMAND)
 {
-	if (!g_pAdminSystem->LoadAdmins())
+	if (!g_pAdminSystem->LoadAdmins() || !GetGlobals())
 		return;
 
-	for (int i = 0; i < gpGlobals->maxClients; i++)
+	for (int i = 0; i < GetGlobals()->maxClients; i++)
 	{
 		ZEPlayer* pPlayer = g_playerManager->GetPlayer(i);
 
@@ -132,12 +133,12 @@ CON_COMMAND_F(c_reload_admins, "Reload admin config", FCVAR_SPONLY | FCVAR_LINKE
 }
 
 #if 0
-CON_COMMAND_F(c_reload_infractions, "Reload infractions file", FCVAR_SPONLY | FCVAR_LINKED_CONCOMMAND)
+CON_COMMAND_F(c_reload_infractions, "- Reload infractions file", FCVAR_SPONLY | FCVAR_LINKED_CONCOMMAND)
 {
-	if (!g_pAdminSystem->LoadInfractions())
+	if (!g_pAdminSystem->LoadInfractions() || !GetGlobals())
 		return;
 
-	for (int i = 0; i < gpGlobals->maxClients; i++)
+	for (int i = 0; i < GetGlobals()->maxClients; i++)
 	{
 		ZEPlayer* pPlayer = g_playerManager->GetPlayer(i);
 
@@ -198,6 +199,22 @@ CON_COMMAND_CHAT_FLAGS(ungag, "<name> - Ungag a player", ADMFLAG_CHAT)
 {
 	ParseInfraction(args, player, false, CInfractionBase::EInfractionType::Gag);
 }
+
+CON_COMMAND_CHAT_FLAGS(eban, "<name> <duration|0 (permanent)> - Ban a player from picking up items", ADMFLAG_BAN)
+{
+	if (!g_cvarEnableEntWatch.Get())
+		return;
+
+	ParseInfraction(args, player, true, CInfractionBase::EInfractionType::Eban);
+}
+
+CON_COMMAND_CHAT_FLAGS(eunban, "<name> - Unban a player from picking up items", ADMFLAG_BAN)
+{
+	if (!g_cvarEnableEntWatch.Get())
+		return;
+
+	ParseInfraction(args, player, false, CInfractionBase::EInfractionType::Eban);
+}
 #endif
 
 CON_COMMAND_CHAT_FLAGS(kick, "<name> - Kick a player", ADMFLAG_KICK)
@@ -222,7 +239,7 @@ CON_COMMAND_CHAT_FLAGS(kick, "<name> - Kick a player", ADMFLAG_KICK)
 		CCSPlayerController* pTarget = CCSPlayerController::FromSlot(pSlots[i]);
 		ZEPlayer* pTargetPlayer = pTarget->GetZEPlayer();
 
-		g_pEngineServer2->DisconnectClient(pTargetPlayer->GetPlayerSlot(), NETWORK_DISCONNECT_KICKED);
+		g_pEngineServer2->DisconnectClient(pTargetPlayer->GetPlayerSlot(), NETWORK_DISCONNECT_KICKED, "Kicked by an admin");
 
 		if (iNumClients == 1)
 			PrintSingleAdminAction(pszCommandPlayerName, pTarget->GetPlayerName(), "kicked");
@@ -523,7 +540,7 @@ CON_COMMAND_CHAT_FLAGS(entfire, "<name> <input> [parameter] - Fire outputs at en
 		ClientPrint(player, HUD_PRINTTALK, CHAT_PREFIX "Input successful on %i entities.", iFoundEnts);
 }
 
-CON_COMMAND_CHAT_FLAGS(entfirepawn, "<name> <inpu> [parameter] - Fire outputs at player pawns", ADMFLAG_RCON)
+CON_COMMAND_CHAT_FLAGS(entfirepawn, "<name> <input> [parameter] - Fire outputs at player pawns", ADMFLAG_RCON)
 {
 	if (args.ArgC() < 3)
 	{
@@ -581,76 +598,6 @@ CON_COMMAND_CHAT_FLAGS(entfirecontroller, "<name> <input> [parameter] - Fire out
 	ClientPrint(player, HUD_PRINTTALK, CHAT_PREFIX "Input successful on %i player controllers.", iFoundEnts);
 }
 
-CON_COMMAND_CHAT_FLAGS(map, "<mapname> - Change map", ADMFLAG_CHANGEMAP)
-{
-	if (args.ArgC() < 2)
-	{
-		ClientPrint(player, HUD_PRINTTALK, CHAT_PREFIX "Usage: !map <mapname>");
-		return;
-	}
-
-	std::string sMapName = args[1];
-
-	for (int i = 0; sMapName[i]; i++)
-	{
-		// Injection prevention, because we may pass user input to ServerCommand
-		if (sMapName[i] == ';' || sMapName[i] == '|')
-			return;
-
-		sMapName[i] = tolower(sMapName[i]);
-	}
-
-	const char* pszMapName = sMapName.c_str();
-
-	if (!g_pEngineServer2->IsMapValid(pszMapName))
-	{
-		std::string sCommand;
-		std::vector<int> foundIndexes = g_pMapVoteSystem->GetMapIndexesFromSubstring(pszMapName);
-
-		// Check if input is numeric (workshop ID)
-		// Not safe to expose to all admins until crashing on failed workshop addon downloads is fixed
-		if ((!player || player->GetZEPlayer()->IsAdminFlagSet(ADMFLAG_RCON)) && V_StringToUint64(pszMapName, 0, NULL, NULL, PARSING_FLAG_SKIP_WARNING) != 0)
-		{
-			sCommand = "host_workshop_map " + sMapName;
-		}
-		else if (g_bVoteManagerEnable && foundIndexes.size() > 0)
-		{
-			if (foundIndexes.size() > 1)
-			{
-				ClientPrint(player, HUD_PRINTTALK, CHAT_PREFIX "Multiple maps matched \x06%s\x01, try being more specific:", pszMapName);
-
-				for (int i = 0; i < foundIndexes.size() && i < 5; i++)
-					ClientPrint(player, HUD_PRINTTALK, "- %s", g_pMapVoteSystem->GetMapName(foundIndexes[i]));
-
-				return;
-			}
-
-			sCommand = "host_workshop_map " + std::to_string(g_pMapVoteSystem->GetMapWorkshopId(foundIndexes[0]));
-		}
-		else
-		{
-			ClientPrint(player, HUD_PRINTTALK, CHAT_PREFIX "Failed to find a map matching %s.", pszMapName);
-			return;
-		}
-
-		ClientPrintAll(HUD_PRINTTALK, CHAT_PREFIX "Changing map to %s...", pszMapName);
-
-		new CTimer(5.0f, false, true, [sCommand]() {
-			g_pEngineServer2->ServerCommand(sCommand.c_str());
-			return -1.0f;
-		});
-
-		return;
-	}
-
-	ClientPrintAll(HUD_PRINTTALK, CHAT_PREFIX "Changing map to %s...", pszMapName);
-
-	new CTimer(5.0f, false, true, [sMapName]() {
-		g_pEngineServer2->ChangeLevel(sMapName.c_str(), nullptr);
-		return -1.0f;
-	});
-}
-
 CON_COMMAND_CHAT_FLAGS(hsay, "<message> - Say something as a hud hint", ADMFLAG_CHAT)
 {
 	if (args.ArgC() < 2)
@@ -689,8 +636,7 @@ CON_COMMAND_CHAT_FLAGS(extend, "<minutes> - Extend current map (negative value r
 
 	int iExtendTime = V_StringToInt32(args[1], 0);
 
-	// Call the votemanager extend function so the extend vote can be checked
-	ExtendMap(iExtendTime);
+	g_pVoteManager->ExtendMap(iExtendTime);
 
 	const char* pszCommandPlayerName = player ? player->GetPlayerName() : CONSOLE_NAME;
 
@@ -702,6 +648,9 @@ CON_COMMAND_CHAT_FLAGS(extend, "<minutes> - Extend current map (negative value r
 
 CON_COMMAND_CHAT_FLAGS(pm, "<name> <message> - Private message a player. This will also show to all online admins", ADMFLAG_GENERIC)
 {
+	if (!GetGlobals())
+		return;
+
 	if (args.ArgC() < 3)
 	{
 		ClientPrint(player, HUD_PRINTTALK, CHAT_PREFIX "Usage: /pm <name> <message>");
@@ -741,7 +690,7 @@ CON_COMMAND_CHAT_FLAGS(pm, "<name> <message> - Private message a player. This wi
 		return;
 	}
 
-	for (int i = 0; i < gpGlobals->maxClients; i++)
+	for (int i = 0; i < GetGlobals()->maxClients; i++)
 	{
 		ZEPlayer* pPlayer = g_playerManager->GetPlayer(i);
 
@@ -757,11 +706,26 @@ CON_COMMAND_CHAT_FLAGS(pm, "<name> <message> - Private message a player. This wi
 	Message("[PM to %s] %s: %s\n", pTarget->GetPlayerName(), pszName, strMessage.c_str());
 }
 
+size_t CountCharacters(const std::string& str)
+{
+	size_t count = 0;
+	for (size_t i = 0; i < str.length(); ++i)
+	{
+		// Check if byte is a UTF-8 lead byte (indicating a new character)
+		if ((str[i] & 0xC0) != 0x80)
+			++count;
+	}
+	return count;
+}
+
 CON_COMMAND_CHAT_FLAGS(who, "- List the flags of all online players", ADMFLAG_GENERIC)
 {
+	if (!GetGlobals())
+		return;
+
 	std::vector<std::tuple<std::string, std::string, uint64>> rgNameSlotID;
 
-	for (size_t i = 0; i < gpGlobals->maxClients; i++)
+	for (size_t i = 0; i < GetGlobals()->maxClients; i++)
 	{
 		CCSPlayerController* ccsPly = CCSPlayerController::FromSlot(i);
 
@@ -776,8 +740,8 @@ CON_COMMAND_CHAT_FLAGS(who, "- List the flags of all online players", ADMFLAG_GE
 		std::string strName = ccsPly->GetPlayerName();
 		if (strName.length() == 0)
 			strName = "< blank >";
-		else if (strName.length() > 20)
-			strName = strName.substr(0, 17) + "...";
+		else if (CountCharacters(strName) > 20)
+			strName = strName.substr(0, 17) + "..."; // This may extra shorten unicode character names, but whatever
 
 		if (pPlayer->IsFakeClient())
 		{
@@ -785,7 +749,13 @@ CON_COMMAND_CHAT_FLAGS(who, "- List the flags of all online players", ADMFLAG_GE
 			continue;
 		}
 
-		uint64 iSteamID = pPlayer->IsAuthenticated() ? pPlayer->GetSteamId64() : pPlayer->GetUnauthenticatedSteamId64();
+		if (!pPlayer->IsAuthenticated())
+		{
+			rgNameSlotID.push_back(std::tuple<std::string, std::string, uint64>(strName, "UNAUTHENTICATED", pPlayer->GetUnauthenticatedSteamId64()));
+			continue;
+		}
+
+		uint64 iSteamID = pPlayer->GetSteamId64();
 		uint64 iFlags = pPlayer->GetAdminFlags();
 		std::string strFlags = "";
 
@@ -847,7 +817,7 @@ CON_COMMAND_CHAT_FLAGS(who, "- List the flags of all online players", ADMFLAG_GE
 			if (strFlags.length() > 1)
 				strFlags = strFlags.substr(2);
 			else
-				strFlags = "NONE";
+				strFlags = "-";
 		}
 
 		rgNameSlotID.push_back(std::tuple<std::string, std::string, uint64>(strName, strFlags, iSteamID));
@@ -860,16 +830,22 @@ CON_COMMAND_CHAT_FLAGS(who, "- List the flags of all online players", ADMFLAG_GE
 		return f < s;
 	});
 
+	if (rgNameSlotID.size() == 0)
+	{
+		ClientPrint(player, HUD_PRINTTALK, "There are no clients currently online.");
+		return;
+	}
+
 	ClientPrint(player, HUD_PRINTCONSOLE, "c_who output: %i client%s", rgNameSlotID.size(), rgNameSlotID.size() == 1 ? "" : "s");
 	ClientPrint(player, HUD_PRINTCONSOLE, "|----------------------|----------------------------------------------------|-------------------|");
 	ClientPrint(player, HUD_PRINTCONSOLE, "|         Name         |                       Flags                        |    Steam64 ID     |");
 	ClientPrint(player, HUD_PRINTCONSOLE, "|----------------------|----------------------------------------------------|-------------------|");
 	for (auto [strPlayerName, strFlags, iSteamID] : rgNameSlotID)
 	{
-		if (strPlayerName.length() % 2 == 1)
+		if (CountCharacters(strPlayerName) % 2 == 1)
 			strPlayerName = strPlayerName + ' ';
-		if (strPlayerName.length() < 20)
-			strPlayerName = std::string((20 - strPlayerName.length()) / 2, ' ') + strPlayerName + std::string((20 - strPlayerName.length()) / 2, ' ');
+		if (CountCharacters(strPlayerName) < 20)
+			strPlayerName = std::string((20 - CountCharacters(strPlayerName)) / 2, ' ') + strPlayerName + std::string((20 - CountCharacters(strPlayerName)) / 2, ' ');
 
 		if (strFlags.length() <= 50)
 		{
@@ -919,7 +895,8 @@ CON_COMMAND_CHAT_FLAGS(who, "- List the flags of all online players", ADMFLAG_GE
 		}	
 	}
 	ClientPrint(player, HUD_PRINTCONSOLE, "|----------------------|----------------------------------------------------|-------------------|");
-	ClientPrint(player, HUD_PRINTTALK, CHAT_PREFIX "Check console for output.");
+	if (player)
+		ClientPrint(player, HUD_PRINTTALK, CHAT_PREFIX "Check console for output.");
 }
 
 #if 0
@@ -967,7 +944,8 @@ CON_COMMAND_CHAT_FLAGS(listdc, "- List recently disconnected players and their S
 
 CON_COMMAND_CHAT_FLAGS(endround, "- Immediately ends the round, client-side variant of endround", ADMFLAG_RCON)
 {
-	g_pGameRules->TerminateRound(0.0f, CSRoundEndReason::Draw);
+	if (g_pGameRules)
+		g_pGameRules->TerminateRound(0.0f, CSRoundEndReason::Draw);
 }
 
 CON_COMMAND_CHAT_FLAGS(money, "<name> <amount> - Set a player's amount of money", ADMFLAG_CHEATS)
@@ -1426,8 +1404,9 @@ void CAdminSystem::ShowDisconnectedPlayers(CCSPlayerController* const pAdmin)
 				bAnyDCedPlayers = true;
 			}
 
-			std::string strTemp = std::get<0>(ply) + "\n\tSteam64 ID - " + std::to_string(std::get<1>(ply)) + "\n\tIP Address - " + std::get<2>(ply);
-			ClientPrint(pAdmin, HUD_PRINTCONSOLE, "%i. %s", i, strTemp.c_str());
+			ClientPrint(pAdmin, HUD_PRINTCONSOLE, "%i. %s", i, std::get<0>(ply).c_str());
+			ClientPrint(pAdmin, HUD_PRINTCONSOLE, "\tSteam64 ID - %s", std::to_string(std::get<1>(ply)).c_str());
+			ClientPrint(pAdmin, HUD_PRINTCONSOLE, "\tIP Address - %s", std::get<2>(ply).c_str());
 		}
 	}
 	if (!bAnyDCedPlayers)
@@ -1436,7 +1415,7 @@ void CAdminSystem::ShowDisconnectedPlayers(CCSPlayerController* const pAdmin)
 
 void CBanInfraction::ApplyInfraction(ZEPlayer* player)
 {
-	g_pEngineServer2->DisconnectClient(player->GetPlayerSlot(), NETWORK_DISCONNECT_KICKBANADDED); // "Kicked and banned"
+	g_pEngineServer2->DisconnectClient(player->GetPlayerSlot(), NETWORK_DISCONNECT_KICKBANADDED, "Banned by an admin"); // "Kicked and banned"
 }
 
 void CMuteInfraction::ApplyInfraction(ZEPlayer* player)
@@ -1457,6 +1436,16 @@ void CGagInfraction::ApplyInfraction(ZEPlayer* player)
 void CGagInfraction::UndoInfraction(ZEPlayer* player)
 {
 	player->SetGagged(false);
+}
+
+void CEbanInfraction::ApplyInfraction(ZEPlayer* player)
+{
+	player->SetEbanned(true);
+}
+
+void CEbanInfraction::UndoInfraction(ZEPlayer* player)
+{
+	player->SetEbanned(false);
 }
 
 std::string FormatTime(std::time_t wTime, bool bInSeconds)
@@ -1487,16 +1476,17 @@ std::string FormatTime(std::time_t wTime, bool bInSeconds)
 	return std::to_string(static_cast<int>(std::floor(wTime))) + " month" + (wTime >= 2 ? "s" : "");
 }
 
-int ParseTimeInput(std::string strTime)
+int ParseTimeInput(std::string strTime, int iDefaultValue)
 {
-	if (strTime.length() == 0 || std::find_if(strTime.begin(), strTime.end(), [](char c) { return c == '-'; }) != strTime.end())
+	// Check if first character is a minus sign, and just return negative 1 if so.
+	if (strTime.length() > 0 && std::find_if(strTime.begin(), strTime.begin() + 1, [](char c) { return c == '-'; }) != (strTime.begin() + 1))
 		return -1;
 
 	std::string strNumbers = "";
 	std::copy_if(strTime.begin(), strTime.end(), std::back_inserter(strNumbers), [](char c) { return std::isdigit(c); });
 
 	if (strNumbers.length() == 0)
-		return -1;
+		return iDefaultValue;
 	else if (strNumbers.length() > 9)
 		// Really high number, just return perma
 		return 0;
@@ -1624,6 +1614,9 @@ void ParseInfraction(const CCommand& args, CCSPlayerController* pAdmin, bool bAd
 				case CInfractionBase::Ban:
 					infraction = new CBanInfraction(iDuration, zpTarget->GetSteamId64());
 					break;
+				case CInfractionBase::Eban:
+					infraction = new CEbanInfraction(iDuration, zpTarget->GetSteamId64());
+					break;
 				default:
 					// This should never be reached, since we it means we are trying to apply an unimplemented block type
 					ClientPrint(pAdmin, HUD_PRINTTALK, CHAT_PREFIX "Improper block type... Send to a dev with the command used.");
@@ -1671,6 +1664,8 @@ const char* GetActionPhrase(CInfractionBase::EInfractionType infType, GrammarTen
 				return bAdding ? "mute" : "unmute";
 			case CInfractionBase::Gag:
 				return bAdding ? "gag" : "ungag";
+			case CInfractionBase::Eban:
+				return bAdding ? "eban" : "eunban";
 		}
 	}
 	else if (iTense == GrammarTense::Past)
@@ -1683,6 +1678,8 @@ const char* GetActionPhrase(CInfractionBase::EInfractionType infType, GrammarTen
 				return bAdding ? "muted" : "unmuted";
 			case CInfractionBase::Gag:
 				return bAdding ? "gagged" : "ungagged";
+			case CInfractionBase::Eban:
+				return bAdding ? "ebanned" : "unebanned";
 		}
 	}
 	else if (iTense == GrammarTense::Continuous)
@@ -1695,6 +1692,8 @@ const char* GetActionPhrase(CInfractionBase::EInfractionType infType, GrammarTen
 				return bAdding ? "muting" : "unmuting";
 			case CInfractionBase::Gag:
 				return bAdding ? "gagging" : "ungagging";
+			case CInfractionBase::Eban:
+				return bAdding ? "ebanning" : "unebanning";
 		}
 	}
 	return "";
@@ -1716,10 +1715,10 @@ void CAdminSystem::RemoveAllPunishments()
 {
 	m_vecInfractions.PurgeAndDeleteElements();
 
-	if (!gpGlobals || !g_playerManager)
+	if (!GetGlobals() || !g_playerManager)
 		return;
 
-	for (int i = 0; i < gpGlobals->maxClients; i++)
+	for (int i = 0; i < GetGlobals()->maxClients; i++)
 	{
 		ZEPlayer* pPlayer = g_playerManager->GetPlayer(i);
 
@@ -1747,8 +1746,9 @@ void CAdminSystem::RemoveSessionPunishments(float fDelay)
 	FOR_EACH_VEC_BACK(m_vecInfractions, i)
 	{
 		time_t timestamp = m_vecInfractions[i]->GetTimestamp();
-		if (!m_vecInfractions[i]->IsSession() && (timestamp > std::time(nullptr) ||
-												  (timestamp == 0 && fDelay == -1)))
+		if (!m_vecInfractions[i]->IsSession()
+			|| timestamp > std::time(nullptr)
+			|| (timestamp == 0 && fDelay == -1))
 		{
 			// Dont remove map session blocks (timestamp == 0) if this is called
 			// due to remove group targetting blocks like !mute @t 1 (negative fDelay)
@@ -1805,7 +1805,7 @@ void CAdminSystem::RemoveInfractionType(ZEPlayer* player, CInfractionBase::EInfr
 	}
 
 	// Check GFLBans for any other infractions on player and apply them if they exist
-	g_pGFLBansSystem->GFLBans_CheckPlayerInfractions(player);
+	g_pGFLBansSystem->CheckPlayerInfractions(player);
 }
 
 #ifdef _DEBUG

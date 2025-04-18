@@ -1,7 +1,7 @@
 /**
  * =============================================================================
  * CS2Fixes
- * Copyright (C) 2023-2024 Source2ZE
+ * Copyright (C) 2023-2025 Source2ZE
  * =============================================================================
  *
  * This program is free software; you can redistribute it and/or modify it under
@@ -35,6 +35,9 @@ extern CCSGameRules* g_pGameRules;
 
 CBaseEntity* UTIL_FindPickerEntity(CBasePlayerController* pPlayer)
 {
+	if (!g_pGameRules)
+		return nullptr;
+
 	static int offset = g_GameConfig->GetOffset("CGameRules_FindPickerEntity");
 
 	if (offset < 0)

@@ -1,7 +1,7 @@
 /**
  * =============================================================================
  * CS2Fixes
- * Copyright (C) 2023-2024 Source2ZE
+ * Copyright (C) 2023-2025 Source2ZE
  * =============================================================================
  *
  * This program is free software; you can redistribute it and/or modify it under
@@ -63,7 +63,8 @@ enum GrammarTense
 {
 	PresentOrNoun,
 	Past,
-	Continuous
+	Continuous,
+	Command
 };
 
 class CInfractionBase
@@ -83,6 +84,7 @@ public:
 		Ban,
 		Mute,
 		Gag,
+		Eban,
 		AdminChatGag
 	};
 
@@ -128,6 +130,16 @@ public:
 	using CInfractionBase::CInfractionBase;
 
 	EInfractionType GetType() override { return Gag; }
+	void ApplyInfraction(ZEPlayer*) override;
+	void UndoInfraction(ZEPlayer*) override;
+};
+
+class CEbanInfraction : public CInfractionBase
+{
+public:
+	using CInfractionBase::CInfractionBase;
+
+	EInfractionType GetType() override { return Eban; }
 	void ApplyInfraction(ZEPlayer*) override;
 	void UndoInfraction(ZEPlayer*) override;
 };
@@ -200,7 +212,7 @@ private:
 extern CAdminSystem* g_pAdminSystem;
 
 // Given a formatted time entered by an admin, return the minutes
-int ParseTimeInput(std::string strTime);
+int ParseTimeInput(std::string strTime, int iDefaultValue = -1);
 
 // Given a time in seconds/minutes, returns a formatted string of the largest (floored) unit of time this exceeds, up to months.
 // Example: FormatTime(70) == "1 minute"

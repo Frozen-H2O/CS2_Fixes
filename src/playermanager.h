@@ -1,7 +1,7 @@
 /**
  * =============================================================================
  * CS2Fixes
- * Copyright (C) 2023-2024 Source2ZE
+ * Copyright (C) 2023-2025 Source2ZE
  * =============================================================================
  *
  * This program is free software; you can redistribute it and/or modify it under
@@ -21,7 +21,9 @@
 #include "bitvec.h"
 #include "common.h"
 #include "entity/cparticlesystem.h"
+#include "entity/cpointworldtext.h"
 #include "entity/lights.h"
+#include "entity/viewmodels.h"
 #include "gamesystem.h"
 #include "steam/isteamuser.h"
 #include "steam/steam_api_common.h"
@@ -155,6 +157,7 @@ public:
 		m_bGagged = false;
 		m_bAdminChatGagged = false;
 		m_bMuted = false;
+		m_bEbanned = false;
 		m_iHideDistance = 0;
 		m_bConnected = false;
 		m_iTotalDamage = 0;
@@ -185,6 +188,12 @@ public:
 		m_pActiveZRClass = nullptr;
 		m_pActiveZRModel = nullptr;
 		m_iButtonWatchMode = 0;
+		m_iEntwatchHudMode = 0;
+		m_bEntwatchClantags = true;
+		m_colorEntwatchHud = Color(255, 255, 255, 255);
+		m_flEntwatchHudX = -7.5f;
+		m_flEntwatchHudY = -2.0f;
+		m_flEntwatchHudSize = 60.0f;
 	}
 
 	~ZEPlayer()
@@ -213,6 +222,7 @@ public:
 	void SetPlayerSlot(CPlayerSlot slot) { m_slot = slot; }
 	void SetMuted(bool muted) { m_bMuted = muted; }
 	void SetGagged(bool gagged) { m_bGagged = gagged; }
+	void SetEbanned(bool ebanned) { m_bEbanned = ebanned; }
 	void SetAdminChatGagged(bool adminChatGagged) { m_bAdminChatGagged = adminChatGagged; }
 	void SetTransmit(int index, bool shouldTransmit) { shouldTransmit ? m_shouldTransmit.Set(index) : m_shouldTransmit.Clear(index); }
 	void ClearTransmit() { m_shouldTransmit.ClearAll(); }
@@ -248,11 +258,18 @@ public:
 	void ReplicateConVar(const char* pszName, const char* pszValue);
 	void SetActiveZRClass(std::shared_ptr<ZRClass> pZRModel) { m_pActiveZRClass = pZRModel; }
 	void SetActiveZRModel(std::shared_ptr<ZRModelEntry> pZRClass) { m_pActiveZRModel = pZRClass; }
+	void SetEntwatchHudMode(int iMode);
+	void SetEntwatchClangtags(bool bStatus);
+	void SetEntwatchHud(CPointWorldText* pWorldText) { m_hEntwatchHud.Set(pWorldText); }
+	void SetEntwatchHudColor(Color colorHud);
+	void SetEntwatchHudPos(float x, float y);
+	void SetEntwatchHudSize(float flSize);
 
 	uint64 GetAdminFlags() { return m_iAdminFlags; }
 	int GetAdminImmunity() { return m_iAdminImmunity; }
 	bool IsMuted() { return m_bMuted; }
 	bool IsGagged() { return m_bGagged; }
+	bool IsEbanned() { return m_bEbanned; }
 	bool IsAdminChatGagged() { return m_bAdminChatGagged; }
 	bool ShouldBlockTransmit(int index) { return m_shouldTransmit.Get(index); }
 	int GetHideDistance();
@@ -289,6 +306,14 @@ public:
 	std::shared_ptr<ZRClass> GetActiveZRClass() { return m_pActiveZRClass; }
 	std::shared_ptr<ZRModelEntry> GetActiveZRModel() { return m_pActiveZRModel; }
 	int GetButtonWatchMode();
+	CBaseViewModel* GetOrCreateCustomViewModel(CCSPlayerPawn* pPawn);
+	int GetEntwatchHudMode();
+	bool GetEntwatchClangtags() { return m_bEntwatchClantags; }
+	CPointWorldText* GetEntwatchHud() { return m_hEntwatchHud.Get(); }
+	Color GetEntwatchHudColor() { return m_colorEntwatchHud; }
+	float GetEntwatchHudX() { return m_flEntwatchHudX; }
+	float GetEntwatchHudY() { return m_flEntwatchHudY; }
+	float GetEntwatchHudSize() { return m_flEntwatchHudSize; }
 
 	void OnSpawn();
 	void OnAuthenticated();
@@ -303,6 +328,7 @@ public:
 	void StartGlow(Color color, int duration);
 	void EndGlow();
 	void SetSteamIdAttribute();
+	void CreateEntwatchHud();
 
 private:
 	bool m_bAuthenticated;
@@ -313,6 +339,7 @@ private:
 	bool m_bFakeClient;
 	bool m_bMuted;
 	bool m_bGagged;
+	bool m_bEbanned;
 	bool m_bAdminChatGagged;
 	uint64 m_iAdminFlags;
 	int m_iAdminImmunity;
@@ -352,21 +379,25 @@ private:
 	std::shared_ptr<ZRClass> m_pActiveZRClass;
 	std::shared_ptr<ZRModelEntry> m_pActiveZRModel;
 	int m_iButtonWatchMode;
+	CHandle<CPointWorldText> m_hEntwatchHud;
+	int m_iEntwatchHudMode;
+	bool m_bEntwatchClantags;
+	Color m_colorEntwatchHud;
+	float m_flEntwatchHudX;
+	float m_flEntwatchHudY;
+	float m_flEntwatchHudSize;
 };
 
 class CPlayerManager
 {
 public:
-	CPlayerManager(bool late = false)
+	CPlayerManager()
 	{
 		V_memset(m_vecPlayers, 0, sizeof(m_vecPlayers));
 		m_nUsingStopSound = -1; // On by default
 		m_nUsingSilenceSound = 0;
 		m_nUsingStopDecals = -1; // On by default
 		m_nUsingNoShake = 0;
-
-		if (late)
-			OnLateLoad();
 	}
 
 	bool OnClientConnected(CPlayerSlot slot, uint64 xuid, const char* pszNetworkID);

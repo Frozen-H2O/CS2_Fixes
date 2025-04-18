@@ -1,7 +1,7 @@
 /**
  * =============================================================================
  * CS2Fixes
- * Copyright (C) 2023-2024 Source2ZE
+ * Copyright (C) 2023-2025 Source2ZE
  * =============================================================================
  *
  * This program is free software; you can redistribute it and/or modify it under
@@ -25,12 +25,14 @@ class CBaseEntity;
 class CGameUI;
 class CPointViewControl;
 class CCSPlayerPawn;
+class CEntityKeyValues;
 
 namespace CGamePlayerEquipHandler
 {
 	void Use(CGamePlayerEquip* pEntity, InputData_t* pInput);
 	void TriggerForAllPlayers(CGamePlayerEquip* pEntity, InputData_t* pInput);
 	bool TriggerForActivatedPlayer(CGamePlayerEquip* pEntity, InputData_t* pInput);
+	void OnPrecache(CGamePlayerEquip* pEntity, const CEntityKeyValues* kv);
 } // namespace CGamePlayerEquipHandler
 
 namespace CGameUIHandler
@@ -53,3 +55,4 @@ void EntityHandler_OnGameFramePre(bool simulate, int tick);
 void EntityHandler_OnGameFramePost(bool simulate, int tick);
 void EntityHandler_OnRoundRestart();
 void EntityHandler_OnEntitySpawned(CBaseEntity* pEntity);
+void EntityHandler_OnLevelInit();

@@ -1,7 +1,7 @@
 /**
  * =============================================================================
  * CS2Fixes
- * Copyright (C) 2023-2024 Source2ZE
+ * Copyright (C) 2023-2025 Source2ZE
  * =============================================================================
  *
  * This program is free software; you can redistribute it and/or modify it under
@@ -35,6 +35,7 @@ extern CGameConfig* g_GameConfig;
 class CGameUI;
 class CEnvHudHint;
 class CPointViewControl;
+class CBasePlayerWeapon;
 
 class CGameSceneNode
 {
@@ -252,6 +253,12 @@ public:
 		addresses::CBaseEntity_SetParent(this, pNewParent, MakeStringToken(""), nullptr);
 	}
 
+	void SetOwner(CBaseEntity* pNewOwner)
+	{
+		static int offset = g_GameConfig->GetOffset("CBaseEntity::SetOwner");
+		CALL_VIRTUAL(void, offset, this, pNewOwner);
+	}
+
 	void Remove()
 	{
 		addresses::UTIL_Remove(this);
@@ -310,6 +317,13 @@ public:
 		if (const auto pCollision = this->m_pCollision())
 			return reinterpret_cast<CBaseModelEntity*>(this);
 
+		return nullptr;
+	}
+
+	[[nodiscard]] CBasePlayerWeapon* AsBasePlayerWeapon()
+	{
+		if (V_StringHasPrefixCaseSensitive(GetClassname(), "weapon_"))
+			return reinterpret_cast<CBasePlayerWeapon*>(this);
 		return nullptr;
 	}
 

@@ -1,7 +1,7 @@
 /**
  * =============================================================================
  * CS2Fixes
- * Copyright (C) 2023-2024 Source2ZE
+ * Copyright (C) 2023-2025 Source2ZE
  * =============================================================================
  *
  * This program is free software; you can redistribute it and/or modify it under
@@ -59,4 +59,13 @@ public:
 	void* vtable;
 	EntityIOConnection_t* m_pConnections;
 	EntityIOOutputDesc_t* m_pDesc;
+};
+
+class InputData_t
+{
+public:
+	CBaseEntity* pActivator;
+	CBaseEntity* pCaller;
+	variant_t value;
+	int nOutputID;
 };

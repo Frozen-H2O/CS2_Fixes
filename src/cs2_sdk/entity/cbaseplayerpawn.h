@@ -1,7 +1,7 @@
 /**
  * =============================================================================
  * CS2Fixes
- * Copyright (C) 2023-2024 Source2ZE
+ * Copyright (C) 2023-2025 Source2ZE
  * =============================================================================
  *
  * This program is free software; you can redistribute it and/or modify it under
@@ -23,7 +23,9 @@
 #include "cbasemodelentity.h"
 #include "services.h"
 
-extern bool g_bDropMapWeapons;
+extern CConVar<bool> g_cvarDropMapWeapons;
+void EW_PlayerDeathPre(CCSPlayerController* pController);
+extern CConVar<bool> g_cvarEnableEntWatch;
 
 class CBasePlayerPawn : public CBaseModelEntity
 {
@@ -46,6 +48,7 @@ public:
 			return;
 
 		CUtlVector<CHandle<CBasePlayerWeapon>>* weapons = m_pWeaponServices()->m_hMyWeapons();
+		std::vector<CBasePlayerWeapon*> vecWeaponsToDrop;
 
 		FOR_EACH_VEC(*weapons, i)
 		{
@@ -56,15 +59,30 @@ public:
 
 			// If this is a map-spawned weapon (items), drop it
 			if (V_strcmp(pWeapon->m_sUniqueHammerID().Get(), "") && pWeapon->GetWeaponVData()->m_GearSlot() != GEAR_SLOT_KNIFE)
-				m_pWeaponServices()->DropWeapon(pWeapon);
+			{
+				// Queue for dropping after, don't modify this vector while we're iterating it
+				vecWeaponsToDrop.push_back(pWeapon);
+			}
 		}
+
+		for (CBasePlayerWeapon* pWeapon : vecWeaponsToDrop)
+			m_pWeaponServices()->DropWeapon(pWeapon);
 	}
 
 	void CommitSuicide(bool bExplode, bool bForce)
 	{
 		// CommitSuicide doesn't go through OnTakeDamage_Alive
-		if (g_bDropMapWeapons)
+		if (g_cvarDropMapWeapons.Get())
+		{
+			if (g_cvarEnableEntWatch.Get())
+			{
+				CCSPlayerController* pController = reinterpret_cast<CCSPlayerController*>(m_hController().Get());
+				if (pController)
+					EW_PlayerDeathPre(pController);
+			}
+
 			DropMapWeapons();
+		}
 
 		static int offset = g_GameConfig->GetOffset("CBasePlayerPawn_CommitSuicide");
 		CALL_VIRTUAL(void, offset, this, bExplode, bForce);

@@ -1,7 +1,7 @@
 /**
  * =============================================================================
  * CS2Fixes
- * Copyright (C) 2023-2024 Source2ZE
+ * Copyright (C) 2023-2025 Source2ZE
  * =============================================================================
  *
  * This program is free software; you can redistribute it and/or modify it under
@@ -119,7 +119,7 @@ public:
 		for (size_t i = 0; i < m_size; i++)
 		{
 			size_t Matches = 0;
-			while (*(pMemory + i + Matches) == pData[Matches] || pData[Matches] == '\x2A')
+			while (i + Matches < m_size && (*(pMemory + i + Matches) == pData[Matches] || pData[Matches] == '\x2A'))
 			{
 				Matches++;
 				if (Matches == iSigLength)
