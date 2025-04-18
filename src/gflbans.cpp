@@ -1300,7 +1300,7 @@ void HistoryCallback(CCSPlayerController* player, CCSPlayerController* pTarget, 
 		{
 			if (history.mapPunishmentLongest[i].value() > 0)
 				strDuration = FormatTime(history.mapPunishmentLongest[i].value(), true);
-			else
+			else if (history.mapPunishmentLongest[i].value() == 0)
 				strDuration = "Permanent";
 		}
 		ClientPrint(player, HUD_PRINTCONSOLE, "\t%s: %s",
