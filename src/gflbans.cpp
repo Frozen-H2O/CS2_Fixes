@@ -94,7 +94,9 @@ CConVar<CUtlString> g_cvarChatFilterNoPunish("gflbans_filter_no_punish_regex", F
 // --- Helper/Utility Functions ---
 void PrintGFLBansError(CCSPlayerController* pCaller, HTTPRequestHandle request, EHTTPStatusCode eStatusCode, json response)
 {
-	std::string strErrorDetail = response.value("detail", "");
+	std::string strErrorDetail = "";
+	if (!response.is_discarded() && !response.empty())
+		strErrorDetail = response.value("detail", "");
 	if (strErrorDetail.length() > 0)
 		ClientPrint(pCaller, HUD_PRINTTALK, GFLBANS_PREFIX "Error code %i: %s", int(eStatusCode), strErrorDetail.c_str());
 	else if (eStatusCode == 0)
