@@ -91,7 +91,7 @@ enum class InfractionFlags
 	ADMIN_CHAT_BLOCK = 1 << 10,
 	CALL_ADMIN_BAN = 1 << 11,
 	SESSION = 1 << 12,
-	DEC_ONLINE_ONLY = 1 << 13,
+	PLAYTIME_BASED = 1 << 13,
 	ITEM_BLOCK = 1 << 14,
 	AUTO_TIER = 1 << 16,
 	NOT_WARNING = (VOICE_BLOCK | CHAT_BLOCK | BAN | ADMIN_CHAT_BLOCK | CALL_ADMIN_BAN | ITEM_BLOCK)
@@ -133,7 +133,7 @@ class GFLBans_Infraction : public GFLBans_InfractionBase
 public:
 	GFLBans_Infraction(InfType infType, CHandle<CCSPlayerController> hTarget,
 					   std::string strReason, CHandle<CCSPlayerController> hAdmin = nullptr,
-					   int iDuration = -1, bool bOnlineOnly = false);
+					   int iDuration = -1, bool bPlaytimeBased = false);
 
 	inline bool IsSession() const noexcept { return m_wExpires < m_wCreated && m_infType != InfType::Ban; }
 
@@ -145,7 +145,7 @@ private:
 	uint m_wCreated; // UNIX timestamp
 	uint m_wExpires; // UNIX timestamp
 	GFLInfractionScope m_gisScope;
-	bool m_bOnlineOnly;
+	bool m_bPlaytimeBased;
 };
 
 class GFLBans_InfractionRemoval : public GFLBans_InfractionBase
@@ -209,7 +209,7 @@ public:
 	// https://github.com/gflze/GFLBans/wiki#standard-infractions
 	void CreateInfraction(InfType infType, EchoType echo, CCSPlayerController* pAdmin,
 						  CCSPlayerController* pBadPerson, std::string strReason, int iDuration,
-						  bool bOnlineOnly, bool bPrintErrorsToAdmin = true);
+						  bool bPlaytimeBased, bool bPrintErrorsToAdmin = true);
 
 	// Removes all infractions of type infType both on the server and on GFLBans
 	// if admin has permission on GFLBans to remove them
@@ -224,7 +224,7 @@ public:
 
 	// Passes pBadPerson's past infraction info into funcLogic
 	// https://github.com/gflze/GFLBans/wiki#getting-infractions-stats
-	void GetPunishmentStats(CCSPlayerController* pAdmin, CCSPlayerController* pBadPerson, bool bOnlineOnly,
+	void GetPunishmentStats(CCSPlayerController* pAdmin, CCSPlayerController* pBadPerson, bool bPlaytimeBased,
 							std::function<void(CCSPlayerController*, CCSPlayerController*, InfractionStatisticsReply)> funcLogic,
 							std::string strReason = "");
 };

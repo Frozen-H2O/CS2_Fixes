@@ -413,9 +413,9 @@ bool CheckJSONForBlock(ZEPlayer* zpPlayer, json jAllBlockInfo, InfType blockType
 // --- GFLBans Objects + Methods ---
 GFLBans_Infraction::GFLBans_Infraction(InfType infType, CHandle<CCSPlayerController> hTarget,
 									   std::string strReason, CHandle<CCSPlayerController> hAdmin,
-									   int iDuration, bool bOnlineOnly) :
+									   int iDuration, bool bPlaytimeBased) :
 	GFLBans_InfractionBase(infType, hTarget, strReason, hAdmin),
-	m_bOnlineOnly(bOnlineOnly)
+	m_bPlaytimeBased(bPlaytimeBased)
 {
 	m_wCreated = std::time(nullptr);
 	m_wExpires = m_wCreated + (iDuration * 60);
@@ -465,8 +465,8 @@ json GFLBans_Infraction::CreateInfractionJSON() const
 			break;
 	}
 
-	if (m_bOnlineOnly && m_infType != InfType::Ban && iDuration > 0)
-		jRequestBody["dec_online_only"] = true;
+	if (m_bPlaytimeBased && m_infType != InfType::Ban && iDuration > 0)
+		jRequestBody["playtime_based"] = true;
 
 	return jRequestBody;
 }
@@ -713,8 +713,8 @@ void ParseInfraction(const CCommand& args, CCSPlayerController* pAdmin, bool bAd
 
 	if (bAdding)
 	{
-		bool bOnlineOnly = iDuration > 0 && (g_cvarMinRealWorldDuration.Get() <= 0 || iDuration < g_cvarMinRealWorldDuration.Get() || args[2][0] == '+');
-		g_pGFLBansSystem->CreateInfraction(infType, EchoType::All, pAdmin, pTarget, strReason, iDuration, bOnlineOnly);
+		bool bPlaytimeBased = iDuration > 0 && (g_cvarMinRealWorldDuration.Get() <= 0 || iDuration < g_cvarMinRealWorldDuration.Get() || args[2][0] == '+');
+		g_pGFLBansSystem->CreateInfraction(infType, EchoType::All, pAdmin, pTarget, strReason, iDuration, bPlaytimeBased);
 	}
 	else
 		g_pGFLBansSystem->RemoveInfraction(infType, EchoType::All, pAdmin, pTarget, strReason);
@@ -723,7 +723,7 @@ void ParseInfraction(const CCommand& args, CCSPlayerController* pAdmin, bool bAd
 // https://github.com/gflze/GFLBans/wiki#standard-infractions
 void GFLBansSystem::CreateInfraction(InfType infType, EchoType echo, CCSPlayerController* pAdmin,
 									 CCSPlayerController* pBadPerson, std::string strReason,
-									 int iDuration, bool bOnlineOnly, bool bPrintErrorsToAdmin)
+									 int iDuration, bool bPlaytimeBased, bool bPrintErrorsToAdmin)
 {
 	if (!pBadPerson)
 		return;
@@ -744,7 +744,7 @@ void GFLBansSystem::CreateInfraction(InfType infType, EchoType echo, CCSPlayerCo
 
 	auto infPunishment = std::make_shared<GFLBans_Infraction>(infType, pBadPerson->GetHandle(), strReason,
 															  pAdmin ? pAdmin->GetHandle() : nullptr,
-															  iDuration, bOnlineOnly);
+															  iDuration, bPlaytimeBased);
 
 	if (infPunishment->IsSession())
 	{
@@ -1916,7 +1916,7 @@ void GFLBansSystem::CheckPlayerInfractions(ZEPlayer* zpPlayer)
 }
 
 void GFLBansSystem::GetPunishmentStats(CCSPlayerController* pAdmin, CCSPlayerController* pBadPerson,
-									   bool bOnlineOnly,
+									   bool bPlaytimeBased,
 									   std::function<void(CCSPlayerController*, CCSPlayerController*, InfractionStatisticsReply)> funcLogic,
 									   std::string strReason)
 {
@@ -1928,8 +1928,8 @@ void GFLBansSystem::GetPunishmentStats(CCSPlayerController* pAdmin, CCSPlayerCon
 						 + "infractions/stats?gs_service=steam&active_only=false&count_only=false&exclude_removed=true&gs_id="
 						 + std::to_string(zpBadPerson->GetSteamId64());
 
-	if (bOnlineOnly)
-		strURL.append("&online_only=true");
+	if (bPlaytimeBased)
+		strURL.append("&playtime_based=true");
 
 	std::string strIP = zpBadPerson->GetIpAddress();
 	if (strIP.length() > 0 && IsValidIP(strIP))
