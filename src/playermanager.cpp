@@ -25,6 +25,7 @@
 #include "engine/igameeventsystem.h"
 #include "entity/ccsplayercontroller.h"
 #include "entwatch.h"
+#include "gflbans.h"
 #include "leader.h"
 #include "map_votes.h"
 #include "networksystem/inetworkmessages.h"
@@ -43,6 +44,7 @@
 extern IVEngineServer2* g_pEngineServer2;
 extern CGameEntitySystem* g_pEntitySystem;
 extern CGlobalVars* GetGlobals();
+extern GFLBansSystem* g_pGFLBansSystem;
 extern IGameEventSystem* g_gameEventSystem;
 extern CUtlVector<CServerSideClient*>* GetClientList();
 extern CSpawnGroupMgrGameSystem* g_pSpawnGroupMgr;
@@ -128,7 +130,7 @@ void ZEPlayer::OnAuthenticated()
 
 void ZEPlayer::CheckInfractions()
 {
-	g_pAdminSystem->ApplyInfractions(this);
+	g_pGFLBansSystem->CheckPlayerInfractions(this);
 }
 
 void ZEPlayer::CheckAdmin()
@@ -937,8 +939,6 @@ void CPlayerManager::CheckInfractions()
 
 		m_vecPlayers[i]->CheckInfractions();
 	}
-
-	g_pAdminSystem->SaveInfractions();
 }
 
 CConVar<bool> g_cvarFlashLightEnable("cs2f_flashlight_enable", FCVAR_NONE, "Whether to enable flashlights", false);
@@ -1719,10 +1719,10 @@ ZEPlayer* CPlayerManager::GetPlayerFromUserId(uint16 userid)
 	return m_vecPlayers[index];
 }
 
-ZEPlayer* CPlayerManager::GetPlayerFromSteamId(uint64 steamid)
+ZEPlayer* CPlayerManager::GetPlayerFromSteamId(uint64 steamid, bool bIgnoreAuthentication)
 {
 	for (ZEPlayer* player : m_vecPlayers)
-		if (player && player->IsAuthenticated() && player->GetSteamId64() == steamid)
+		if (player && ((player->IsAuthenticated() && player->GetSteamId64() == steamid) || (bIgnoreAuthentication && player->GetUnauthenticatedSteamId64() == steamid)))
 			return player;
 
 	return nullptr;

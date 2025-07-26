@@ -200,6 +200,7 @@
     <ClCompile Include="src\events.cpp" />
     <ClCompile Include="src\gameconfig.cpp" />
     <ClCompile Include="src\gamesystem.cpp" />
+    <ClCompile Include="src\gflbans.cpp" />
     <ClCompile Include="src\httpmanager.cpp" />
     <ClCompile Include="src\idlemanager.cpp" />
     <ClCompile Include="src\map_votes.cpp" />
@@ -272,6 +273,7 @@
     <ClInclude Include="src\eventlistener.h" />
     <ClInclude Include="src\gamesystem.h" />
     <ClInclude Include="src\gameconfig.h" />
+    <ClInclude Include="src\gflbans.h" />
     <ClInclude Include="src\httpmanager.h" />
     <ClInclude Include="src\idlemanager.h" />
     <ClInclude Include="src\mempatch.h" />

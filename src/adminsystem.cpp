@@ -29,6 +29,7 @@
 #include "entwatch.h"
 #include "filesystem.h"
 #include "gamesystem.h"
+#include "gflbans.h"
 #include "hud_manager.h"
 #include "icvar.h"
 #include "interfaces/interfaces.h"
@@ -46,6 +47,7 @@ extern IVEngineServer2* g_pEngineServer2;
 extern CGameEntitySystem* g_pEntitySystem;
 extern CGlobalVars* GetGlobals();
 extern CCSGameRules* g_pGameRules;
+extern GFLBansSystem* g_pGFLBansSystem;
 extern CPlayerManager* g_playerManager;
 
 CAdminSystem* g_pAdminSystem = nullptr;
@@ -136,6 +138,7 @@ CON_COMMAND_F(c_reload_admins, "- Reload admin config", FCVAR_SPONLY | FCVAR_LIN
 	Message("Admins reloaded\n");
 }
 
+#if 0
 CON_COMMAND_F(c_reload_infractions, "- Reload infractions file", FCVAR_SPONLY | FCVAR_LINKED_CONCOMMAND)
 {
 	if (!g_pAdminSystem->LoadInfractions() || !GetGlobals())
@@ -218,6 +221,7 @@ CON_COMMAND_CHAT_FLAGS(eunban, "<name> - Unban a player from picking up items", 
 
 	ParseInfraction(args, player, false, CInfractionBase::EInfractionType::Eban);
 }
+#endif
 
 CON_COMMAND_CHAT_FLAGS(kick, "<name> - Kick a player", ADMFLAG_KICK)
 {
@@ -862,6 +866,7 @@ CON_COMMAND_CHAT_FLAGS(who, "- List the flags of all online players", ADMFLAG_GE
 		ClientPrint(player, HUD_PRINTTALK, CHAT_PREFIX "Check console for output.");
 }
 
+#if 0
 CON_COMMAND_CHAT(status, "<name> - Checks a player's active punishments. Non-admins may only check their own punishments")
 {
 	int iNumClients = 0;
@@ -897,6 +902,7 @@ CON_COMMAND_CHAT(status, "<name> - Checks a player's active punishments. Non-adm
 	ClientPrint(player, HUD_PRINTTALK, CHAT_PREFIX "%s %s.",
 				pTarget == player ? "You are" : (std::string(pTarget->GetPlayerName()) + " is").c_str(), strPunishment.c_str());
 }
+#endif
 
 CON_COMMAND_CHAT_FLAGS(listdc, "- List recently disconnected players and their Steam64 IDs", ADMFLAG_GENERIC)
 {
@@ -1263,7 +1269,6 @@ void CAdmin::SetImmunity(std::uint32_t iAdminImmunity)
 CAdminSystem::CAdminSystem()
 {
 	LoadAdmins();
-	LoadInfractions();
 
 	// Fill out disconnected player list with empty objects which we overwrite as players leave
 	for (int i = 0; i < 20; i++)
@@ -1460,6 +1465,7 @@ void CAdminSystem::AddOrUpdateAdmin(uint64 iSteamID, uint64 iFlags, int iAdminIm
 	admin->SetImmunity(iAdminImmunity);
 }
 
+#if 0
 bool CAdminSystem::LoadInfractions()
 {
 	m_vecInfractions.PurgeAndDeleteElements();
@@ -1548,6 +1554,7 @@ void CAdminSystem::SaveInfractions()
 	if (!pKV->SaveToFile(g_pFullFileSystem, szPath))
 		Warning("Failed to save infractions to %s\n", szPath);
 }
+#endif
 
 void CAdminSystem::AddInfraction(CInfractionBase* infraction)
 {
@@ -1585,26 +1592,39 @@ bool CAdminSystem::ApplyInfractions(ZEPlayer* player)
 
 		m_vecInfractions[i]->ApplyInfraction(player);
 	}
-
 	return true;
 }
 
-bool CAdminSystem::FindAndRemoveInfraction(ZEPlayer* player, CInfractionBase::EInfractionType type)
+bool CAdminSystem::FindAndRemoveInfraction(ZEPlayer* player, CInfractionBase::EInfractionType type, bool bRemoveSession)
 {
+	if (!player || player->IsFakeClient() || !player->IsAuthenticated())
+		return false;
+	bool bRemovedPunishment = false;
+
 	FOR_EACH_VEC_BACK(m_vecInfractions, i)
 	{
-		if (m_vecInfractions[i]->GetSteamId64() == player->GetSteamId64() && m_vecInfractions[i]->GetType() == type)
+		if (m_vecInfractions[i]->GetSteamId64() == player->GetSteamId64() && m_vecInfractions[i]->GetType() == type && (bRemoveSession || !m_vecInfractions[i]->IsSession()))
 		{
 			m_vecInfractions[i]->UndoInfraction(player);
 			m_vecInfractions.Remove(i);
 
-			return true;
+			bRemovedPunishment = true;
 		}
 	}
 
-	return false;
+	if (bRemovedPunishment && !bRemoveSession)
+	{
+		// If we undid a timed block but haven't touched session blocks, make sure any session blocks still apply
+		FOR_EACH_VEC(m_vecInfractions, i)
+		{
+			if (m_vecInfractions[i]->GetSteamId64() == player->GetSteamId64() && m_vecInfractions[i]->GetType() == type)
+				m_vecInfractions[i]->ApplyInfraction(player);
+		}
+	}
+	return bRemovedPunishment;
 }
 
+#if 0
 bool CAdminSystem::FindAndRemoveInfractionSteamId64(uint64 steamid64, CInfractionBase::EInfractionType type)
 {
 	FOR_EACH_VEC_BACK(m_vecInfractions, i)
@@ -1619,6 +1639,7 @@ bool CAdminSystem::FindAndRemoveInfractionSteamId64(uint64 steamid64, CInfractio
 
 	return false;
 }
+#endif
 
 CAdmin* CAdminSystem::FindAdmin(uint64 iSteamID)
 {
@@ -1664,6 +1685,14 @@ std::string CAdminSystem::StringifyFlags(uint64 iFlags)
 
 void CAdminSystem::AddDisconnectedPlayer(const char* pszName, uint64 xuid, const char* pszIP)
 {
+	// Remove all non-session infractions for a player when they disconnect, since these should be
+	// queried for again when the player rejoins
+	FOR_EACH_VEC_BACK(m_vecInfractions, i)
+	{
+		if (m_vecInfractions[i]->GetSteamId64() == xuid && !m_vecInfractions[i]->IsSession())
+			m_vecInfractions.Remove(i);
+	}
+
 	auto plyInfo = std::make_tuple(pszName, xuid, pszIP);
 	for (auto& dcPlyInfo : m_rgDCPly)
 		if (std::get<1>(dcPlyInfo) == std::get<1>(plyInfo))
@@ -1840,6 +1869,7 @@ std::string GetReason(const CCommand& args, int iArgsBefore, bool bStripUnicode)
 	return strOutput;
 }
 
+#if 0
 void ParseInfraction(const CCommand& args, CCSPlayerController* pAdmin, bool bAdding, CInfractionBase::EInfractionType infType)
 {
 	if (args.ArgC() < 2 || (bAdding && args.ArgC() < 3))
@@ -1987,3 +2017,128 @@ const char* GetActionPhrase(CInfractionBase::EInfractionType infType, GrammarTen
 	}
 	return "";
 }
+#endif
+
+// GFLBans integration + debug stuff
+void CAdminChatGagInfraction::ApplyInfraction(ZEPlayer* player)
+{
+	player->SetAdminChatGagged(true);
+}
+
+void CAdminChatGagInfraction::UndoInfraction(ZEPlayer* player)
+{
+	player->SetAdminChatGagged(false);
+}
+
+void CAdminSystem::RemoveAllPunishments()
+{
+	m_vecInfractions.PurgeAndDeleteElements();
+
+	if (!GetGlobals() || !g_playerManager)
+		return;
+
+	for (int i = 0; i < GetGlobals()->maxClients; i++)
+	{
+		ZEPlayer* pPlayer = g_playerManager->GetPlayer(i);
+
+		if (!pPlayer || pPlayer->IsFakeClient())
+			continue;
+
+		pPlayer->CheckInfractions();
+	}
+}
+
+void CAdminSystem::RemoveSessionPunishments(float fDelay)
+{
+	if (fDelay > 0)
+	{
+		new CTimer(fDelay, true, true, []() {
+			g_pAdminSystem->RemoveSessionPunishments(-1);
+			return -1.0f;
+		});
+		return;
+	}
+
+#ifdef _DEBUG
+	Message("Attempting to remove all session punishments\n");
+#endif
+	FOR_EACH_VEC_BACK(m_vecInfractions, i)
+	{
+		time_t timestamp = m_vecInfractions[i]->GetTimestamp();
+		if (!m_vecInfractions[i]->IsSession()
+			|| timestamp > std::time(nullptr)
+			|| (timestamp == 0 && fDelay == -1))
+		{
+			// Dont remove map session blocks (timestamp == 0) if this is called
+			// due to remove group targetting blocks like !mute @t 1 (negative fDelay)
+			continue;
+		}
+
+		ZEPlayer* pPlayer = g_playerManager->GetPlayerFromSteamId(m_vecInfractions[i]->GetSteamId64());
+
+		if (pPlayer && !pPlayer->IsFakeClient())
+			m_vecInfractions[i]->UndoInfraction(pPlayer);
+
+		m_vecInfractions.Remove(i);
+	}
+}
+
+void CAdminSystem::RemoveInfractionType(ZEPlayer* player, CInfractionBase::EInfractionType itypeToRemove, bool bRemoveGagAndMute)
+{
+	if (!player || player->IsFakeClient())
+		return;
+
+	if (bRemoveGagAndMute)
+	{
+		player->SetMuted(false);
+		player->SetGagged(false);
+	}
+	else
+	{
+		switch (itypeToRemove)
+		{
+			case CInfractionBase::EInfractionType::Mute:
+				player->SetMuted(false);
+				break;
+			case CInfractionBase::EInfractionType::Gag:
+				player->SetGagged(false);
+				break;
+			case CInfractionBase::EInfractionType::Eban:
+				player->SetEbanned(false);
+			case CInfractionBase::EInfractionType::AdminChatGag:
+				player->SetAdminChatGagged(false);
+		}
+	}
+
+	FOR_EACH_VEC_BACK(m_vecInfractions, i)
+	{
+		uint64 iSteamID = player->IsAuthenticated() ? player->GetSteamId64() : player->GetUnauthenticatedSteamId64();
+
+		// We're only interested in infractions concerning this player
+		if (m_vecInfractions[i]->GetSteamId64() != iSteamID)
+			continue;
+
+		// We only care about removing infractions of the given type(s)
+		if (m_vecInfractions[i]->GetType() == itypeToRemove
+			|| (bRemoveGagAndMute && (m_vecInfractions[i]->GetType() == CInfractionBase::EInfractionType::Mute || m_vecInfractions[i]->GetType() == CInfractionBase::EInfractionType::Gag)))
+			m_vecInfractions.Remove(i);
+	}
+
+	// Check GFLBans for any other infractions on player and apply them if they exist
+	g_pGFLBansSystem->CheckPlayerInfractions(player);
+}
+
+#ifdef _DEBUG
+CON_COMMAND_CHAT_FLAGS(dumpinf, "- Dump server's infractions table to the server console", ADMFLAG_CHAT | ADMFLAG_BAN)
+{
+	g_pAdminSystem->DumpInfractions();
+}
+
+void CAdminSystem::DumpInfractions()
+{
+	FOR_EACH_VEC(m_vecInfractions, i)
+	{
+		Message(("Infraction: " + std::to_string(m_vecInfractions[i]->GetType()) + "\n\tSteamID:" + std::to_string(m_vecInfractions[i]->GetSteamId64()) + "\n\tSession: " + std::to_string(m_vecInfractions[i]->IsSession()) + "\n").c_str());
+	}
+}
+#endif

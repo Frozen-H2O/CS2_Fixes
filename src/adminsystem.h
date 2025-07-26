@@ -63,14 +63,15 @@ enum GrammarTense
 {
 	PresentOrNoun,
 	Past,
-	Continuous
+	Continuous,
+	Command
 };
 
 class CInfractionBase
 {
 public:
-	CInfractionBase(time_t duration, uint64 steamId, bool bEndTime = false) :
-		m_iSteamID(steamId)
+	CInfractionBase(time_t duration, uint64 steamId, bool bEndTime = false, bool bSession = false) :
+		m_iSteamID(steamId), m_bSession(bSession)
 	{
 		// The duration is in minutes here
 		if (!bEndTime)
@@ -84,6 +85,7 @@ public:
 		Mute,
 		Gag,
 		Eban,
+		AdminChatGag
 	};
 
 	virtual EInfractionType GetType() = 0;
@@ -91,10 +93,12 @@ public:
 	virtual void UndoInfraction(ZEPlayer*) = 0;
 	time_t GetTimestamp() { return m_iTimestamp; }
 	uint64 GetSteamId64() { return m_iSteamID; }
+	virtual bool IsSession() const noexcept { return m_bSession; }
 
 private:
 	time_t m_iTimestamp;
 	uint64 m_iSteamID;
+	bool m_bSession;
 };
 
 class CBanInfraction : public CInfractionBase
@@ -107,6 +111,7 @@ public:
 
 	// This isn't needed as we'll just not kick the player when checking infractions upon joining
 	void UndoInfraction(ZEPlayer*) override {}
+	bool IsSession() const noexcept override { return false; }
 };
 
 class CMuteInfraction : public CInfractionBase
@@ -135,6 +140,16 @@ public:
 	using CInfractionBase::CInfractionBase;
 
 	EInfractionType GetType() override { return Eban; }
+	void ApplyInfraction(ZEPlayer*) override;
+	void UndoInfraction(ZEPlayer*) override;
+};
+
+class CAdminChatGagInfraction : public CInfractionBase
+{
+public:
+	using CInfractionBase::CInfractionBase;
+
+	EInfractionType GetType() override { return AdminChatGag; }
 	void ApplyInfraction(ZEPlayer*) override;
 	void UndoInfraction(ZEPlayer*) override;
 };
@@ -178,12 +193,9 @@ public:
 	CAdminSystem();
 	bool LoadAdmins();
 	void AddOrUpdateAdmin(uint64 iSteamID, uint64 iFlags = 0, int iAdminImmunity = 0);
-	bool LoadInfractions();
 	void AddInfraction(CInfractionBase*);
-	void SaveInfractions();
 	bool ApplyInfractions(ZEPlayer* player);
-	bool FindAndRemoveInfraction(ZEPlayer* player, CInfractionBase::EInfractionType type);
-	bool FindAndRemoveInfractionSteamId64(uint64 steamid64, CInfractionBase::EInfractionType type);
+	bool FindAndRemoveInfraction(ZEPlayer* player, CInfractionBase::EInfractionType type, bool bRemoveSession = true);
 	CAdmin* FindAdmin(uint64 iSteamID);
 	uint64 ParseFlags(std::string strFlags);
 	std::string StringifyFlags(uint64 iFlags);
@@ -192,6 +204,20 @@ public:
 
 	// TODO: Remove this once servers have been given a few months to update cs2fixes
 	bool ConvertAdminsKVToJSON();
+
+	// This forcibly resyncs all blocks with the web. It does NOT tell GFLBans to remove blocks
+	void RemoveAllPunishments();
+
+	// If given a fDelay in seconds, will remove all timed session punishments after that fDelay
+	// If given no parameter (map change), will remove all session punishments with 0 duration
+	void RemoveSessionPunishments(float fDelay = 0);
+
+	void RemoveInfractionType(ZEPlayer* player, CInfractionBase::EInfractionType itypeToRemove,
+							  bool bRemoveGagAndMute);
+
+#ifdef _DEBUG
+	void DumpInfractions();
+#endif
 
 private:
 	std::map<std::string, CAdminBase> m_mapAdminGroups;

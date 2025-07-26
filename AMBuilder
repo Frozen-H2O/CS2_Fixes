@@ -58,6 +58,7 @@ for sdk_target in MMSPlugin.sdk_targets:
     'src/playermanager.cpp',
     'src/gameconfig.cpp',
     'src/gamesystem.cpp',
+    'src/gflbans.cpp',
     'src/votemanager.cpp',
     'src/httpmanager.cpp',
     'src/discord.cpp',

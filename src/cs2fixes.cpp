@@ -40,6 +40,7 @@
 #include "gameconfig.h"
 #include "gameevents.pb.h"
 #include "gamesystem.h"
+#include "gflbans.h"
 #include "httpmanager.h"
 #include "hud_manager.h"
 #include "icvar.h"
@@ -356,6 +357,7 @@ bool CS2Fixes::Load(PluginId id, ISmmAPI* ismm, char* error, size_t maxlen, bool
 	g_pZRWeaponConfig = new ZRWeaponConfig();
 	g_pZRHitgroupConfig = new ZRHitgroupConfig();
 	g_pEntityListener = new CEntityListener();
+	g_pGFLBansSystem = new GFLBansSystem();
 	g_pIdleSystem = new CIdleSystem();
 	g_pPanoramaVoteHandler = new CPanoramaVoteHandler();
 	g_pEWHandler = new CEWHandler();
@@ -369,9 +371,9 @@ bool CS2Fixes::Load(PluginId id, ISmmAPI* ismm, char* error, size_t maxlen, bool
 	});
 
 	// Check for the expiration of infractions like mutes or gags
-	new CTimer(30.0f, true, true, []() {
-		g_playerManager->CheckInfractions();
-		return 30.0f;
+	new CTimer(60.0f, true, true, []() {
+		g_pGFLBansSystem->Heartbeat();
+		return 60.0f;
 	});
 
 	// Check for idle players and kick them if permitted by cs2f_idle_kick_* 'convars'
@@ -466,6 +468,9 @@ bool CS2Fixes::Unload(char* error, size_t maxlen)
 	if (g_playerManager)
 		delete g_playerManager;
 
+	if (g_pGFLBansSystem)
+		delete g_pGFLBansSystem;
+
 	if (g_pDiscordBotManager)
 		delete g_pDiscordBotManager;
 
@@ -531,9 +536,10 @@ void CS2Fixes::Hook_DispatchConCommand(ConCommandRef cmdHandle, const CCommandCo
 	{
 		auto pController = CCSPlayerController::FromSlot(iCommandPlayerSlot);
 		bool bGagged = pController && pController->GetZEPlayer()->IsGagged();
+		bool bAdminChatGagged = pController && pController->GetZEPlayer()->IsAdminChatGagged();
 		bool bFlooding = pController && pController->GetZEPlayer()->IsFlooding();
-		bool bAdminChat = bTeamSay && *args[1] == '@';
-		bool bSilent = *args[1] == '/' || bAdminChat;
+		bool bAdminChat = *args[1] == '@';
+		bool bSilent = *args[1] == '/' || bAdminChat || (!bGagged && g_pGFLBansSystem->FilterMessage(pController, args));
 		bool bCommand = *args[1] == '!' || *args[1] == '/';
 
 		// Chat messages should generate events regardless
@@ -561,7 +567,7 @@ void CS2Fixes::Hook_DispatchConCommand(ConCommandRef cmdHandle, const CCommandCo
 			if (pController)
 				ClientPrint(pController, HUD_PRINTTALK, CHAT_PREFIX "You are flooding the server!");
 		}
-		else if (bAdminChat && GetGlobals()) // Admin chat can be sent by anyone but only seen by admins, use flood protection here too
+		else if (bAdminChat && GetGlobals() && !bAdminChatGagged) // Admin chat can be sent by anyone but only seen by admins, use flood protection here too
 		{
 			// HACK: At this point, we can safely modify the arg buffer as it won't be passed anywhere else
 			// The string here is originally ("@foo bar"), trim it to be (foo bar)
@@ -622,6 +628,17 @@ void CS2Fixes::Hook_StartupServer(const GameSessionConfiguration_t& config, ISou
 
 	g_pPanoramaVoteHandler->Reset();
 	g_pVoteManager->VoteManager_Init();
+
+	// Run a heartbeat on map change to update web, while removing local punishments
+	new CTimer(5.0f, true, true, []() {
+		if (g_pGFLBansSystem->Heartbeat())
+		{
+			g_pAdminSystem->RemoveSessionPunishments();
+			return -1.0f;
+		}
+		else
+			return 5.0f;
+	});
 
 	g_pIdleSystem->Reset();
 }
@@ -887,6 +904,10 @@ void CS2Fixes::Hook_OnClientConnected(CPlayerSlot slot, const char* pszName, uin
 	// Ideally we would use CServerSideClient::IsHLTV().. but it doesn't work :(
 	if (bFakePlayer && V_strcmp(pszName, pszTvName))
 		g_playerManager->OnBotConnected(slot);
+
+	ZEPlayer* zpPlayer = g_playerManager->GetPlayer(slot);
+	if (zpPlayer)
+		zpPlayer->CheckInfractions();
 }
 
 bool CS2Fixes::Hook_ClientConnect(CPlayerSlot slot, const char* pszName, uint64 xuid, const char* pszNetworkID, bool unk1, CBufferString* pRejectReason)

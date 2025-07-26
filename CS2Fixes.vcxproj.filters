@@ -83,6 +83,9 @@
     <ClCompile Include="src\gameconfig.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="src\gflbans.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="sdk\tier1\convar.cpp">
       <Filter>Source Files\sdk</Filter>
     </ClCompile>
@@ -305,6 +308,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="src\gameconfig.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="src\gflbans.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="src\map_votes.h">
