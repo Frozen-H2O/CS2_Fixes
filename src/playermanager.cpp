@@ -568,6 +568,23 @@ int ZEPlayer::GetButtonWatchMode()
 	return g_pUserPreferencesSystem->GetPreferenceInt(m_slot.Get(), BUTTON_WATCH_PREF_KEY_NAME, m_iButtonWatchMode);
 }
 
+void ZEPlayer::CycleConnectWatch()
+{
+	m_iConnectWatchMode = static_cast<EConnectWatchMode>((static_cast<int>(m_iConnectWatchMode) + 1) % 4);
+	g_pUserPreferencesSystem->SetPreferenceInt(m_slot.Get(), CONNECT_WATCH_PREF_KEY_NAME, static_cast<int>(m_iConnectWatchMode));
+}
+
+// 0: Off
+// 1: VPN only
+// 2: All Connections
+// 3: All Connections and Disconnections
+EConnectWatchMode ZEPlayer::GetConnectWatchMode()
+{
+	if (!IsAdminFlagSet(ADMFLAG_GENERIC) || IsFakeClient())
+		return EConnectWatchMode::None;
+	return static_cast<EConnectWatchMode>(g_pUserPreferencesSystem->GetPreferenceInt(m_slot.Get(), CONNECT_WATCH_PREF_KEY_NAME, static_cast<int>(m_iConnectWatchMode)));
+}
+
 void ZEPlayer::SetSteamIdAttribute()
 {
 	if (!g_cvarEnableMapSteamIds.Get())

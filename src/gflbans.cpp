@@ -97,6 +97,7 @@ void PrintGFLBansError(CCSPlayerController* pCaller, HTTPRequestHandle request, 
 	std::string strErrorDetail = "";
 	if (!response.is_discarded() && !response.empty())
 		strErrorDetail = response.value("detail", "");
+
 	if (strErrorDetail.length() > 0)
 		ClientPrint(pCaller, HUD_PRINTTALK, GFLBANS_PREFIX "Error code %i: %s", int(eStatusCode), strErrorDetail.c_str());
 	else if (eStatusCode == 0)
@@ -113,6 +114,7 @@ void LogGFLBansError(std::string strName, HTTPRequestHandle request, EHTTPStatus
 	std::string strErrorDetail = "";
 	if (!response.is_discarded() && !response.empty())
 		strErrorDetail = response.value("detail", "");
+
 	if (strErrorDetail.length() > 0)
 		Message("GFLBans %s Error Code %i: %s\n", strName.c_str(), int(eStatusCode), strErrorDetail.c_str());
 	else if (eStatusCode == 0)
@@ -408,6 +410,257 @@ bool CheckJSONForBlock(ZEPlayer* zpPlayer, json jAllBlockInfo, InfType blockType
 		infraction->ApplyInfraction(zpPlayer);
 	}
 	return true;
+}
+
+static std::string DisconnectReasonString(ENetworkDisconnectionReason iReason)
+{
+	switch (iReason)
+	{
+		case ENetworkDisconnectionReason::NETWORK_DISCONNECT_SHUTDOWN:
+			return "SHUTDOWN";
+		case ENetworkDisconnectionReason::NETWORK_DISCONNECT_DISCONNECT_BY_USER:
+			return "DISCONNECT_BY_USER";
+		case ENetworkDisconnectionReason::NETWORK_DISCONNECT_DISCONNECT_BY_SERVER:
+			return "DISCONNECT_BY_SERVER";
+		case ENetworkDisconnectionReason::NETWORK_DISCONNECT_LOST:
+			return "LOST";
+		case ENetworkDisconnectionReason::NETWORK_DISCONNECT_OVERFLOW:
+			return "OVERFLOW";
+		case ENetworkDisconnectionReason::NETWORK_DISCONNECT_STEAM_BANNED:
+			return "STEAM_BANNED";
+		case ENetworkDisconnectionReason::NETWORK_DISCONNECT_STEAM_INUSE:
+			return "STEAM_INUSE";
+		case ENetworkDisconnectionReason::NETWORK_DISCONNECT_STEAM_TICKET:
+			return "STEAM_TICKET";
+		case ENetworkDisconnectionReason::NETWORK_DISCONNECT_STEAM_LOGON:
+			return "STEAM_LOGON";
+		case ENetworkDisconnectionReason::NETWORK_DISCONNECT_STEAM_AUTHCANCELLED:
+			return "STEAM_AUTHCANCELLED";
+		case ENetworkDisconnectionReason::NETWORK_DISCONNECT_STEAM_AUTHALREADYUSED:
+			return "STEAM_AUTHALREADYUSED";
+		case ENetworkDisconnectionReason::NETWORK_DISCONNECT_STEAM_AUTHINVALID:
+			return "STEAM_AUTHINVALID";
+		case ENetworkDisconnectionReason::NETWORK_DISCONNECT_STEAM_VACBANSTATE:
+			return "STEAM_VACBANSTATE";
+		case ENetworkDisconnectionReason::NETWORK_DISCONNECT_STEAM_LOGGED_IN_ELSEWHERE:
+			return "STEAM_LOGGED_IN_ELSEWHERE";
+		case ENetworkDisconnectionReason::NETWORK_DISCONNECT_STEAM_VAC_CHECK_TIMEDOUT:
+			return "STEAM_VAC_CHECK_TIMEDOUT";
+		case ENetworkDisconnectionReason::NETWORK_DISCONNECT_STEAM_DROPPED:
+			return "STEAM_DROPPED";
+		case ENetworkDisconnectionReason::NETWORK_DISCONNECT_STEAM_OWNERSHIP:
+			return "STEAM_OWNERSHIP";
+		case ENetworkDisconnectionReason::NETWORK_DISCONNECT_SERVERINFO_OVERFLOW:
+			return "SERVERINFO_OVERFLOW";
+		case ENetworkDisconnectionReason::NETWORK_DISCONNECT_TICKMSG_OVERFLOW:
+			return "TICKMSG_OVERFLOW";
+		case ENetworkDisconnectionReason::NETWORK_DISCONNECT_STRINGTABLEMSG_OVERFLOW:
+			return "STRINGTABLEMSG_OVERFLOW";
+		case ENetworkDisconnectionReason::NETWORK_DISCONNECT_DELTAENTMSG_OVERFLOW:
+			return "DELTAENTMSG_OVERFLOW";
+		case ENetworkDisconnectionReason::NETWORK_DISCONNECT_TEMPENTMSG_OVERFLOW:
+			return "TEMPENTMSG_OVERFLOW";
+		case ENetworkDisconnectionReason::NETWORK_DISCONNECT_SOUNDSMSG_OVERFLOW:
+			return "SOUNDSMSG_OVERFLOW";
+		case ENetworkDisconnectionReason::NETWORK_DISCONNECT_SNAPSHOTOVERFLOW:
+			return "SNAPSHOTOVERFLOW";
+		case ENetworkDisconnectionReason::NETWORK_DISCONNECT_SNAPSHOTERROR:
+			return "SNAPSHOTERROR";
+		case ENetworkDisconnectionReason::NETWORK_DISCONNECT_RELIABLEOVERFLOW:
+			return "RELIABLEOVERFLOW";
+		case ENetworkDisconnectionReason::NETWORK_DISCONNECT_BADDELTATICK:
+			return "BADDELTATICK";
+		case ENetworkDisconnectionReason::NETWORK_DISCONNECT_NOMORESPLITS:
+			return "NOMORESPLITS";
+		case ENetworkDisconnectionReason::NETWORK_DISCONNECT_TIMEDOUT:
+			return "TIMEDOUT";
+		case ENetworkDisconnectionReason::NETWORK_DISCONNECT_DISCONNECTED:
+			return "DISCONNECTED";
+		case ENetworkDisconnectionReason::NETWORK_DISCONNECT_LEAVINGSPLIT:
+			return "LEAVINGSPLIT";
+		case ENetworkDisconnectionReason::NETWORK_DISCONNECT_DIFFERENTCLASSTABLES:
+			return "DIFFERENTCLASSTABLES";
+		case ENetworkDisconnectionReason::NETWORK_DISCONNECT_BADRELAYPASSWORD:
+			return "BADRELAYPASSWORD";
+		case ENetworkDisconnectionReason::NETWORK_DISCONNECT_BADSPECTATORPASSWORD:
+			return "BADSPECTATORPASSWORD";
+		case ENetworkDisconnectionReason::NETWORK_DISCONNECT_HLTVRESTRICTED:
+			return "HLTVRESTRICTED";
+		case ENetworkDisconnectionReason::NETWORK_DISCONNECT_NOSPECTATORS:
+			return "NOSPECTATORS";
+		case ENetworkDisconnectionReason::NETWORK_DISCONNECT_HLTVUNAVAILABLE:
+			return "HLTVUNAVAILABLE";
+		case ENetworkDisconnectionReason::NETWORK_DISCONNECT_HLTVSTOP:
+			return "HLTVSTOP";
+		case ENetworkDisconnectionReason::NETWORK_DISCONNECT_KICKED:
+			return "KICKED";
+		case ENetworkDisconnectionReason::NETWORK_DISCONNECT_BANADDED:
+			return "BANADDED";
+		case ENetworkDisconnectionReason::NETWORK_DISCONNECT_KICKBANADDED:
+			return "KICKBANADDED";
+		case ENetworkDisconnectionReason::NETWORK_DISCONNECT_HLTVDIRECT:
+			return "HLTVDIRECT";
+		case ENetworkDisconnectionReason::NETWORK_DISCONNECT_PURESERVER_CLIENTEXTRA:
+			return "PURESERVER_CLIENTEXTRA";
+		case ENetworkDisconnectionReason::NETWORK_DISCONNECT_PURESERVER_MISMATCH:
+			return "PURESERVER_MISMATCH";
+		case ENetworkDisconnectionReason::NETWORK_DISCONNECT_USERCMD:
+			return "USERCMD";
+		case ENetworkDisconnectionReason::NETWORK_DISCONNECT_REJECTED_BY_GAME:
+			return "REJECTED_BY_GAME";
+		case ENetworkDisconnectionReason::NETWORK_DISCONNECT_MESSAGE_PARSE_ERROR:
+			return "MESSAGE_PARSE_ERROR";
+		case ENetworkDisconnectionReason::NETWORK_DISCONNECT_INVALID_MESSAGE_ERROR:
+			return "INVALID_MESSAGE_ERROR";
+		case ENetworkDisconnectionReason::NETWORK_DISCONNECT_BAD_SERVER_PASSWORD:
+			return "BAD_SERVER_PASSWORD";
+		case ENetworkDisconnectionReason::NETWORK_DISCONNECT_DIRECT_CONNECT_RESERVATION:
+			return "DIRECT_CONNECT_RESERVATION";
+		case ENetworkDisconnectionReason::NETWORK_DISCONNECT_CONNECTION_FAILURE:
+			return "CONNECTION_FAILURE";
+		case ENetworkDisconnectionReason::NETWORK_DISCONNECT_NO_PEER_GROUP_HANDLERS:
+			return "NO_PEER_GROUP_HANDLERS";
+		case ENetworkDisconnectionReason::NETWORK_DISCONNECT_RECONNECTION:
+			return "RECONNECTION";
+		case ENetworkDisconnectionReason::NETWORK_DISCONNECT_LOOPSHUTDOWN:
+			return "LOOPSHUTDOWN";
+		case ENetworkDisconnectionReason::NETWORK_DISCONNECT_LOOPDEACTIVATE:
+			return "LOOPDEACTIVATE";
+		case ENetworkDisconnectionReason::NETWORK_DISCONNECT_HOST_ENDGAME:
+			return "HOST_ENDGAME";
+		case ENetworkDisconnectionReason::NETWORK_DISCONNECT_LOOP_LEVELLOAD_ACTIVATE:
+			return "LOOP_LEVELLOAD_ACTIVATE";
+		case ENetworkDisconnectionReason::NETWORK_DISCONNECT_CREATE_SERVER_FAILED:
+			return "CREATE_SERVER_FAILED";
+		case ENetworkDisconnectionReason::NETWORK_DISCONNECT_EXITING:
+			return "EXITING";
+		case ENetworkDisconnectionReason::NETWORK_DISCONNECT_REQUEST_HOSTSTATE_IDLE:
+			return "REQUEST_HOSTSTATE_IDLE";
+		case ENetworkDisconnectionReason::NETWORK_DISCONNECT_REQUEST_HOSTSTATE_HLTVRELAY:
+			return "REQUEST_HOSTSTATE_HLTVRELAY";
+		case ENetworkDisconnectionReason::NETWORK_DISCONNECT_CLIENT_CONSISTENCY_FAIL:
+			return "CLIENT_CONSISTENCY_FAIL";
+		case ENetworkDisconnectionReason::NETWORK_DISCONNECT_CLIENT_UNABLE_TO_CRC_MAP:
+			return "CLIENT_UNABLE_TO_CRC_MAP";
+		case ENetworkDisconnectionReason::NETWORK_DISCONNECT_CLIENT_NO_MAP:
+			return "CLIENT_NO_MAP";
+		case ENetworkDisconnectionReason::NETWORK_DISCONNECT_CLIENT_DIFFERENT_MAP:
+			return "CLIENT_DIFFERENT_MAP";
+		case ENetworkDisconnectionReason::NETWORK_DISCONNECT_SERVER_REQUIRES_STEAM:
+			return "SERVER_REQUIRES_STEAM";
+		case ENetworkDisconnectionReason::NETWORK_DISCONNECT_STEAM_DENY_MISC:
+			return "STEAM_DENY_MISC";
+		case ENetworkDisconnectionReason::NETWORK_DISCONNECT_STEAM_DENY_BAD_ANTI_CHEAT:
+			return "STEAM_DENY_BAD_ANTI_CHEAT";
+		case ENetworkDisconnectionReason::NETWORK_DISCONNECT_SERVER_SHUTDOWN:
+			return "SERVER_SHUTDOWN";
+		case ENetworkDisconnectionReason::NETWORK_DISCONNECT_REPLAY_INCOMPATIBLE:
+			return "REPLAY_INCOMPATIBLE";
+		case ENetworkDisconnectionReason::NETWORK_DISCONNECT_CONNECT_REQUEST_TIMEDOUT:
+			return "CONNECT_REQUEST_TIMEDOUT";
+		case ENetworkDisconnectionReason::NETWORK_DISCONNECT_SERVER_INCOMPATIBLE:
+			return "SERVER_INCOMPATIBLE";
+		case ENetworkDisconnectionReason::NETWORK_DISCONNECT_LOCALPROBLEM_MANYRELAYS:
+			return "LOCALPROBLEM_MANYRELAYS";
+		case ENetworkDisconnectionReason::NETWORK_DISCONNECT_LOCALPROBLEM_HOSTEDSERVERPRIMARYRELAY:
+			return "LOCALPROBLEM_HOSTEDSERVERPRIMARYRELAY";
+		case ENetworkDisconnectionReason::NETWORK_DISCONNECT_LOCALPROBLEM_NETWORKCONFIG:
+			return "LOCALPROBLEM_NETWORKCONFIG";
+		case ENetworkDisconnectionReason::NETWORK_DISCONNECT_LOCALPROBLEM_OTHER:
+			return "LOCALPROBLEM_OTHER";
+		case ENetworkDisconnectionReason::NETWORK_DISCONNECT_REMOTE_TIMEOUT:
+			return "REMOTE_TIMEOUT";
+		case ENetworkDisconnectionReason::NETWORK_DISCONNECT_REMOTE_TIMEOUT_CONNECTING:
+			return "REMOTE_TIMEOUT_CONNECTING";
+		case ENetworkDisconnectionReason::NETWORK_DISCONNECT_REMOTE_OTHER:
+			return "REMOTE_OTHER";
+		case ENetworkDisconnectionReason::NETWORK_DISCONNECT_REMOTE_BADCRYPT:
+			return "REMOTE_BADCRYPT";
+		case ENetworkDisconnectionReason::NETWORK_DISCONNECT_REMOTE_CERTNOTTRUSTED:
+			return "REMOTE_CERTNOTTRUSTED";
+		case ENetworkDisconnectionReason::NETWORK_DISCONNECT_UNUSUAL:
+			return "UNUSUAL";
+		case ENetworkDisconnectionReason::NETWORK_DISCONNECT_INTERNAL_ERROR:
+			return "INTERNAL_ERROR";
+		case ENetworkDisconnectionReason::NETWORK_DISCONNECT_REJECT_BADCHALLENGE:
+			return "REJECT_BADCHALLENGE";
+		case ENetworkDisconnectionReason::NETWORK_DISCONNECT_REJECT_NOLOBBY:
+			return "REJECT_NOLOBBY";
+		case ENetworkDisconnectionReason::NETWORK_DISCONNECT_REJECT_BACKGROUND_MAP:
+			return "REJECT_BACKGROUND_MAP";
+		case ENetworkDisconnectionReason::NETWORK_DISCONNECT_REJECT_SINGLE_PLAYER:
+			return "REJECT_SINGLE_PLAYER";
+		case ENetworkDisconnectionReason::NETWORK_DISCONNECT_REJECT_HIDDEN_GAME:
+			return "REJECT_HIDDEN_GAME";
+		case ENetworkDisconnectionReason::NETWORK_DISCONNECT_REJECT_LANRESTRICT:
+			return "REJECT_LANRESTRICT";
+		case ENetworkDisconnectionReason::NETWORK_DISCONNECT_REJECT_BADPASSWORD:
+			return "REJECT_BADPASSWORD";
+		case ENetworkDisconnectionReason::NETWORK_DISCONNECT_REJECT_SERVERFULL:
+			return "REJECT_SERVERFULL";
+		case ENetworkDisconnectionReason::NETWORK_DISCONNECT_REJECT_INVALIDRESERVATION:
+			return "REJECT_INVALIDRESERVATION";
+		case ENetworkDisconnectionReason::NETWORK_DISCONNECT_REJECT_FAILEDCHANNEL:
+			return "REJECT_FAILEDCHANNEL";
+		case ENetworkDisconnectionReason::NETWORK_DISCONNECT_REJECT_CONNECT_FROM_LOBBY:
+			return "REJECT_CONNECT_FROM_LOBBY";
+		case ENetworkDisconnectionReason::NETWORK_DISCONNECT_REJECT_RESERVED_FOR_LOBBY:
+			return "REJECT_RESERVED_FOR_LOBBY";
+		case ENetworkDisconnectionReason::NETWORK_DISCONNECT_REJECT_INVALIDKEYLENGTH:
+			return "REJECT_INVALIDKEYLENGTH";
+		case ENetworkDisconnectionReason::NETWORK_DISCONNECT_REJECT_OLDPROTOCOL:
+			return "REJECT_OLDPROTOCOL";
+		case ENetworkDisconnectionReason::NETWORK_DISCONNECT_REJECT_NEWPROTOCOL:
+			return "REJECT_NEWPROTOCOL";
+		case ENetworkDisconnectionReason::NETWORK_DISCONNECT_REJECT_INVALIDCONNECTION:
+			return "REJECT_INVALIDCONNECTION";
+		case ENetworkDisconnectionReason::NETWORK_DISCONNECT_REJECT_INVALIDCERTLEN:
+			return "REJECT_INVALIDCERTLEN";
+		case ENetworkDisconnectionReason::NETWORK_DISCONNECT_REJECT_INVALIDSTEAMCERTLEN:
+			return "REJECT_INVALIDSTEAMCERTLEN";
+		case ENetworkDisconnectionReason::NETWORK_DISCONNECT_REJECT_STEAM:
+			return "REJECT_STEAM";
+		case ENetworkDisconnectionReason::NETWORK_DISCONNECT_REJECT_SERVERAUTHDISABLED:
+			return "REJECT_SERVERAUTHDISABLED";
+		case ENetworkDisconnectionReason::NETWORK_DISCONNECT_REJECT_SERVERCDKEYAUTHINVALID:
+			return "REJECT_SERVERCDKEYAUTHINVALID";
+		case ENetworkDisconnectionReason::NETWORK_DISCONNECT_REJECT_BANNED:
+			return "REJECT_BANNED";
+		case ENetworkDisconnectionReason::NETWORK_DISCONNECT_KICKED_TEAMKILLING:
+			return "KICKED_TEAMKILLING";
+		case ENetworkDisconnectionReason::NETWORK_DISCONNECT_KICKED_TK_START:
+			return "KICKED_TK_START";
+		case ENetworkDisconnectionReason::NETWORK_DISCONNECT_KICKED_UNTRUSTEDACCOUNT:
+			return "KICKED_UNTRUSTEDACCOUNT";
+		case ENetworkDisconnectionReason::NETWORK_DISCONNECT_KICKED_CONVICTEDACCOUNT:
+			return "KICKED_CONVICTEDACCOUNT";
+		case ENetworkDisconnectionReason::NETWORK_DISCONNECT_KICKED_COMPETITIVECOOLDOWN:
+			return "KICKED_COMPETITIVECOOLDOWN";
+		case ENetworkDisconnectionReason::NETWORK_DISCONNECT_KICKED_TEAMHURTING:
+			return "KICKED_TEAMHURTING";
+		case ENetworkDisconnectionReason::NETWORK_DISCONNECT_KICKED_HOSTAGEKILLING:
+			return "KICKED_HOSTAGEKILLING";
+		case ENetworkDisconnectionReason::NETWORK_DISCONNECT_KICKED_VOTEDOFF:
+			return "KICKED_VOTEDOFF";
+		case ENetworkDisconnectionReason::NETWORK_DISCONNECT_KICKED_IDLE:
+			return "KICKED_IDLE";
+		case ENetworkDisconnectionReason::NETWORK_DISCONNECT_KICKED_SUICIDE:
+			return "KICKED_SUICIDE";
+		case ENetworkDisconnectionReason::NETWORK_DISCONNECT_KICKED_NOSTEAMLOGIN:
+			return "KICKED_NOSTEAMLOGIN";
+		case ENetworkDisconnectionReason::NETWORK_DISCONNECT_KICKED_NOSTEAMTICKET:
+			return "KICKED_NOSTEAMTICKET";
+		case ENetworkDisconnectionReason::NETWORK_DISCONNECT_KICKED_INPUTAUTOMATION:
+			return "KICKED_INPUTAUTOMATION";
+		case ENetworkDisconnectionReason::NETWORK_DISCONNECT_KICKED_VACNETABNORMALBEHAVIOR:
+			return "KICKED_VACNETABNORMALBEHAVIOR";
+		case ENetworkDisconnectionReason::NETWORK_DISCONNECT_KICKED_INSECURECLIENT:
+			return "KICKED_INSECURECLIENT";
+
+		case ENetworkDisconnectionReason::NETWORK_DISCONNECT_INVALID:
+		default:
+			return "INVALID";
+	};
 }
 
 // --- GFLBans Objects + Methods ---
@@ -973,8 +1226,7 @@ void GFLBansSystem::CreateInfraction(InfType infType, EchoType echo, CCSPlayerCo
 			}
 			else if (hAdmin && hAdmin.Get() && bPrintErrorsToAdmin)
 				PrintGFLBansError(hAdmin.Get(), request, eStatusCode, response);
-			else
-				LogGFLBansError("CreateInfraction", request, eStatusCode, response);
+			LogGFLBansError("CreateInfraction", request, eStatusCode, response);
 		},
 		g_rghdGFLBansAuth);
 }
@@ -1152,8 +1404,7 @@ void GFLBansSystem::RemoveInfraction(InfType infType, EchoType echo, CCSPlayerCo
 			}
 			else if (hAdmin && hAdmin.Get() && bPrintErrorsToAdmin)
 				PrintGFLBansError(hAdmin.Get(), request, eStatusCode, response);
-			else
-				LogGFLBansError("RemoveInfraction", request, eStatusCode, response);
+			LogGFLBansError("RemoveInfraction", request, eStatusCode, response);
 		},
 		g_rghdGFLBansAuth);
 }
@@ -1578,6 +1829,7 @@ CON_COMMAND_CHAT_FLAGS(claim, "- Claim the most recent GFLBans report/calladmin 
 		[hPlayer](HTTPRequestHandle request, EHTTPStatusCode eStatusCode, json response) {
 			if (!hPlayer || hPlayer.Get())
 				PrintGFLBansError(hPlayer.Get(), request, eStatusCode, response);
+			LogGFLBansError("c_claim", request, eStatusCode, response);
 		},
 		g_rghdGFLBansAuth);
 }
@@ -1734,8 +1986,140 @@ CON_COMMAND_CHAT(status, "<name> - List a player's active punishments. Non-admin
 		[hPlayer](HTTPRequestHandle request, EHTTPStatusCode eStatusCode, json response) {
 			if (!hPlayer || hPlayer.Get())
 				PrintGFLBansError(hPlayer.Get(), request, eStatusCode, response);
+			LogGFLBansError("c_status", request, eStatusCode, response);
 		},
 		g_rghdGFLBansAuth);
+}
+
+static void VPNCheck(const CCommand& args, CCSPlayerController* player)
+{
+	if (args.ArgC() < 2)
+	{
+		ClientPrint(player, HUD_PRINTTALK, CHAT_PREFIX "Usage: !check <name>");
+		return;
+	}
+
+	int iNumClients = 0;
+	int pSlots[MAXPLAYERS];
+
+	if (!g_playerManager->CanTargetPlayers(player, args[1], iNumClients, pSlots, NO_RANDOM | NO_MULTIPLE | NO_BOT))
+		return;
+
+	CCSPlayerController* pTarget = CCSPlayerController::FromSlot(pSlots[0]);
+	ZEPlayer* zpTarget = pTarget->GetZEPlayer();
+
+	// Send the requests
+	std::string strURL = g_cvarGFLBansApiUrl.Get().String();
+	strURL.append("gs/vpn?gs_service=steam&gs_id=");
+	strURL.append(std::to_string(zpTarget->IsAuthenticated() ? zpTarget->GetSteamId64() : 0));
+	strURL.append("&ip=");
+	strURL.append(zpTarget->GetIpAddress());
+
+	CHandle<CCSPlayerController> hPlayer = player ? player->GetHandle() : nullptr;
+	CHandle<CCSPlayerController> hTarget = pTarget->GetHandle();
+
+	g_HTTPManager.Get(
+		strURL.c_str(),
+		[hPlayer, hTarget](HTTPRequestHandle request, json response) {
+			if (g_cvarGFLBansLogLevel.Get() == static_cast<int>(LogLevel::Debug))
+				Message("VPN response: %s\n", response.dump().c_str());
+
+			CCSPlayerController* pPlayer = hPlayer ? hPlayer.Get() : nullptr;
+			if (hPlayer && !pPlayer)
+				return;
+
+			CCSPlayerController* pTarget = hTarget.Get();
+			if (!pTarget)
+			{
+				ClientPrint(pPlayer, HUD_PRINTTALK, GFLBANS_PREFIX "Target not found.");
+				return;
+			}
+
+			ZEPlayer* zpTarget = pTarget->GetZEPlayer();
+			if (!zpTarget)
+			{
+				ClientPrint(pPlayer, HUD_PRINTTALK, GFLBANS_PREFIX "Target not found.");
+				return;
+			}
+
+			std::string strCountry = response.value("countryName", "");
+
+			std::string strVPNText = "";
+			if (!response.value("is_immune", false))
+			{
+				if (response.value("is_dubious", false))
+					strVPNText = " on a\x10 possible VPN\x01";
+				else if (response.value("is_vpn", false))
+					strVPNText = " on a\x07 VPN\x01";
+			}
+
+			if (!strCountry.empty())
+				ClientPrint(pPlayer, HUD_PRINTTALK, GFLBANS_PREFIX "%s is connected from\x04 %s\x01%s.",
+							pTarget->GetPlayerName(), strCountry.c_str(), strVPNText.c_str());
+			else if (!strVPNText.empty())
+				ClientPrint(pPlayer, HUD_PRINTTALK, GFLBANS_PREFIX "%s is connected %s.",
+							pTarget->GetPlayerName(), strVPNText.c_str());
+			else
+				ClientPrint(pPlayer, HUD_PRINTTALK, GFLBANS_PREFIX "%s is connected on a residential or business IP.",
+							pTarget->GetPlayerName());
+		},
+		[hPlayer](HTTPRequestHandle request, EHTTPStatusCode eStatusCode, json response) {
+			if (!hPlayer || hPlayer.Get())
+				PrintGFLBansError(hPlayer.Get(), request, eStatusCode, response);
+			LogGFLBansError("VPNCheck", request, eStatusCode, response);
+		},
+		g_rghdGFLBansAuth);
+}
+
+CON_COMMAND_CHAT_FLAGS(vpn, "<name> - Check information around a player's IP address", ADMFLAG_GENERIC)
+{
+	VPNCheck(args, player);
+}
+
+CON_COMMAND_CHAT_FLAGS(check, "<name> - Check information around a player's IP address", ADMFLAG_GENERIC)
+{
+	VPNCheck(args, player);
+}
+
+static void CycleConnectWatchMode(const CCommand& args, CCSPlayerController* player)
+{
+	if (!player)
+	{
+		ClientPrint(player, HUD_PRINTTALK, GFLBANS_PREFIX "This command cannot be used from console.");
+		return;
+	}
+
+	ZEPlayer* zpPlayer = player->GetZEPlayer();
+	if (!zpPlayer)
+		return;
+
+	zpPlayer->CycleConnectWatch();
+
+	switch (zpPlayer->GetConnectWatchMode())
+	{
+		case EConnectWatchMode::None:
+			ClientPrint(player, HUD_PRINTTALK, CONNECTWATCH_PREFIX "No longer printing connection messages.");
+			return;
+		case EConnectWatchMode::VPN:
+			ClientPrint(player, HUD_PRINTTALK, CONNECTWATCH_PREFIX "Printing VPN join messages.");
+			return;
+		case EConnectWatchMode::Connections:
+			ClientPrint(player, HUD_PRINTTALK, CONNECTWATCH_PREFIX "Printing join messages.");
+			return;
+		case EConnectWatchMode::All:
+			ClientPrint(player, HUD_PRINTTALK, CONNECTWATCH_PREFIX "Printing all connection messages.");
+			return;
+	}
+}
+
+CON_COMMAND_CHAT_FLAGS(cw, "- Cycles connect watch mode", ADMFLAG_GENERIC)
+{
+	CycleConnectWatchMode(args, player);
+}
+
+CON_COMMAND_CHAT_FLAGS(connectwatch, "- Cycles connect watch mode", ADMFLAG_GENERIC)
+{
+	CycleConnectWatchMode(args, player);
 }
 
 // --- GFLBans Generic Functions ---
@@ -1989,4 +2373,140 @@ void GFLBansSystem::GetPunishmentStats(CCSPlayerController* pAdmin, CCSPlayerCon
 		},
 		nullptr,
 		g_rghdGFLBansAuth);
+}
+
+void GFLBansSystem::ConnectWatchCallback(ZEPlayer* zpPlayer, std::string strName)
+{
+	std::string strPlayer = "\x05" + strName;
+
+	if (zpPlayer->IsFakeClient())
+	{
+		for (int i = 0; i < GetGlobals()->maxClients; i++)
+		{
+			ZEPlayer* zpAdmin = g_playerManager->GetPlayer(i);
+
+			if (!zpAdmin || zpAdmin->GetConnectWatchMode() == EConnectWatchMode::None 
+				|| zpAdmin->GetConnectWatchMode() == EConnectWatchMode::VPN)
+				continue;
+
+			ClientPrint(CCSPlayerController::FromSlot(i), HUD_PRINTTALK,
+							CONNECTWATCH_PREFIX "%s [\x06%s\x01] connected.",
+							strPlayer.c_str(), "BOT");
+		}
+		return;
+	}
+
+	strPlayer.append(" [\x06");
+	strPlayer.append(std::to_string(zpPlayer->IsAuthenticated() ? zpPlayer->GetSteamId64() : zpPlayer->GetUnauthenticatedSteamId64()));
+	strPlayer.append("]\x01");
+
+	strName.append(" [");
+	strName.append(std::to_string(zpPlayer->IsAuthenticated() ? zpPlayer->GetSteamId64() : zpPlayer->GetUnauthenticatedSteamId64()));
+	strName.append("]");
+
+	std::string strIP = zpPlayer->GetIpAddress();
+
+	std::string strURL = g_cvarGFLBansApiUrl.Get().String();
+	strURL.append("gs/vpn?gs_service=steam&gs_id=");
+	strURL.append(std::to_string(zpPlayer->IsAuthenticated() ? zpPlayer->GetSteamId64() : zpPlayer->GetUnauthenticatedSteamId64()));
+	strURL.append("&ip=");
+	strURL.append(zpPlayer->GetIpAddress());
+
+	g_HTTPManager.Get(
+		strURL.c_str(),
+		[strPlayer, strIP, strName](HTTPRequestHandle request, json response) {
+			if (g_cvarGFLBansLogLevel.Get() == static_cast<int>(LogLevel::Debug))
+				Message("ConnectWatch response: %s\n", response.dump().c_str());
+
+			if (!GetGlobals())
+				return;
+
+			std::string strConnectMessage = "\x09" + strPlayer + " connected";
+
+			std::string strCountry = response.value("countryName", "");
+			if (!strCountry.empty())
+				strConnectMessage.append(" from\x04 " + strCountry + "\x01");
+
+			std::string strVPNText = "";
+			if (!response.value("is_immune", false))
+			{
+				if (response.value("is_vpn", false))
+				{
+					strVPNText = " on a\x07 VPN\x01";
+					Message("[ConnectWatch] %s connected on a VPN [%s].\n", strName.c_str(), strIP.c_str());
+				}
+				else if (response.value("is_dubious", false))
+				{
+					strVPNText = " on a\x10 possible VPN\x01";
+					Message("[ConnectWatch] %s connected on a dubious VPN [%s].\n", strName.c_str(), strIP.c_str());
+				}
+			}
+			if (!strVPNText.empty())
+				strConnectMessage.append(strVPNText);
+
+			for (int i = 0; i < GetGlobals()->maxClients; i++)
+			{
+				ZEPlayer* zpAdmin = g_playerManager->GetPlayer(i);
+
+				if (!zpAdmin || zpAdmin->GetConnectWatchMode() == EConnectWatchMode::None
+					|| (zpAdmin->GetConnectWatchMode() == EConnectWatchMode::VPN && strVPNText.empty()))
+					continue;
+
+				ClientPrint(CCSPlayerController::FromSlot(i), HUD_PRINTTALK, CONNECTWATCH_PREFIX "%s.", strConnectMessage.c_str());
+			}
+		},
+		[strPlayer](HTTPRequestHandle request, EHTTPStatusCode eStatusCode, json response) {
+			for (int i = 0; i < GetGlobals()->maxClients; i++)
+			{
+				ZEPlayer* zpAdmin = g_playerManager->GetPlayer(i);
+
+				if (!zpAdmin || zpAdmin->GetConnectWatchMode() == EConnectWatchMode::None
+					|| zpAdmin->GetConnectWatchMode() == EConnectWatchMode::VPN)
+					continue;
+
+				ClientPrint(CCSPlayerController::FromSlot(i), HUD_PRINTTALK, CONNECTWATCH_PREFIX "%s connected.", strPlayer.c_str());
+			}
+		},
+		g_rghdGFLBansAuth);
+}
+
+void GFLBansSystem::ConnectWatch(ZEPlayer* zpPlayer, std::string strName)
+{
+	if (!GetGlobals() || !zpPlayer)
+		return;
+
+	ZEPlayerHandle hPlayer = zpPlayer->GetHandle();
+	
+	// Delay 1 tick in case they rejoin due to MultiAddonManager
+	new CTimer(0.0f, false, true, [hPlayer, strName]() {
+		ZEPlayer* zpPlayer = hPlayer.Get();
+		if (zpPlayer && zpPlayer->IsConnected())
+			g_pGFLBansSystem->ConnectWatchCallback(zpPlayer, strName);
+		return -1.0f;
+	});
+}
+
+void GFLBansSystem::DisconnectWatch(ENetworkDisconnectionReason reason, const char* pszName, uint64 xuid)
+{
+	if (!GetGlobals())
+		return;
+
+	std::string strMessage = "\x09";
+	strMessage.append(pszName);
+	strMessage.append(" [\x06");
+	strMessage.append(xuid > 0 ? std::to_string(xuid) : "BOT");
+	strMessage.append("\x01] disconnected");
+
+	if (DisconnectReasonString(reason) != "INVALID")
+		strMessage.append(" [\x09" + DisconnectReasonString(reason) + "\1]");
+
+	for (int i = 0; i < GetGlobals()->maxClients; i++)
+	{
+		ZEPlayer* zpAdmin = g_playerManager->GetPlayer(i);
+
+		if (!zpAdmin || zpAdmin->GetConnectWatchMode() != EConnectWatchMode::All)
+			continue;
+
+		ClientPrint(CCSPlayerController::FromSlot(i), HUD_PRINTTALK, CONNECTWATCH_PREFIX "%s.", strMessage.c_str());
+	}
 }

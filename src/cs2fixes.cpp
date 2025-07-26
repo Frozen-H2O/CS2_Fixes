@@ -932,6 +932,8 @@ void CS2Fixes::Hook_ClientPutInServer(CPlayerSlot slot, char const* pszName, int
 
 	if (g_cvarEnableZR.Get())
 		ZR_Hook_ClientPutInServer(slot, pszName, type, xuid);
+
+	g_pGFLBansSystem->ConnectWatch(g_playerManager->GetPlayer(slot), pszName);
 }
 
 void CS2Fixes::Hook_ClientDisconnect(CPlayerSlot slot, ENetworkDisconnectionReason reason, const char* pszName, uint64 xuid, const char* pszNetworkID)
@@ -944,7 +946,10 @@ void CS2Fixes::Hook_ClientDisconnect(CPlayerSlot slot, ENetworkDisconnectionReas
 
 	// Dont add to c_listdc clients that are downloading MultiAddonManager stuff or were present during a map change
 	if (reason != NETWORK_DISCONNECT_LOOPSHUTDOWN && reason != NETWORK_DISCONNECT_SHUTDOWN)
+	{
 		g_pAdminSystem->AddDisconnectedPlayer(pszName, xuid, pPlayer ? pPlayer->GetIpAddress() : "");
+		g_pGFLBansSystem->DisconnectWatch(reason, pszName, xuid);
+	}
 
 	g_playerManager->OnClientDisconnect(slot);
 }

@@ -27,6 +27,7 @@
 using json = nlohmann::json;
 
 #define GFLBANS_PREFIX " \x07[GFLBans]\1 "
+#define CONNECTWATCH_PREFIX " \x04[CW]\1 "
 
 enum class LogLevel
 {
@@ -227,6 +228,11 @@ public:
 	void GetPunishmentStats(CCSPlayerController* pAdmin, CCSPlayerController* pBadPerson, bool bPlaytimeBased,
 							std::function<void(CCSPlayerController*, CCSPlayerController*, InfractionStatisticsReply)> funcLogic,
 							std::string strReason = "");
+
+	// Print player info to admins on connect/disconnect
+	void ConnectWatch(ZEPlayer* zpPlayer, std::string strName);
+	void ConnectWatchCallback(ZEPlayer* zpPlayer, std::string strName);
+	void DisconnectWatch(ENetworkDisconnectionReason reason, const char* pszName, uint64 xuid);
 };
 
 extern GFLBansSystem* g_pGFLBansSystem;

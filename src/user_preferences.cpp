@@ -143,6 +143,10 @@ void CUserPreferencesSystem::OnPutPreferences(int iSlot)
 	player->SetEntwatchHudPos(flEntwatchHudposX, flEntwatchHudposY);
 	player->SetEntwatchHudColor(ewHudColor);
 	player->SetEntwatchHudSize(flEntwatchHudSize);
+
+	int iConnectWatchMode = GetPreferenceInt(iSlot, CONNECT_WATCH_PREF_KEY_NAME, static_cast<int>(EConnectWatchMode::All));
+	for (int i = 0; i < iConnectWatchMode; i++)
+		player->CycleConnectWatch();
 }
 
 void CUserPreferencesSystem::PullPreferences(int iSlot)
